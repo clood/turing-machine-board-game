@@ -20,7 +20,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { useAppDispatch } from "hooks/useAppDispatch";
 import { useAppSelector } from "hooks/useAppSelector";
 import { usePaletteMode } from "hooks/usePaletteMode";
-import { FC, useState } from "react";
+import { FC, useEffect, useState } from "react";
 import { useUpdateEffect } from "react-use";
 import { savesActions } from "store/slices/savesSlice";
 import Comments from "./Comments";
@@ -52,6 +52,17 @@ const Root: FC = () => {
   }, [state.saves]);
 
   const canBeSaved = useCanBeSaved();
+
+  // Auto-dismiss alerts after 3 seconds
+  useEffect(() => {
+    if (!state.alert.open) return;
+
+    const timeout = window.setTimeout(() => {
+      dispatch(alertActions.closeAlert());
+    }, 3000);
+
+    return () => window.clearTimeout(timeout);
+  }, [state.alert.open, dispatch]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -175,9 +186,7 @@ const Root: FC = () => {
               value={language}
               disabled={false}
               prefixId="settings__lang"
-              onChange={(value) =>
-                dispatch(settingsActions.updateLanguage(value))
-              }
+              onChange={(value) => dispatch(settingsActions.updateLanguage(value))}
             />
             <Divider
               orientation="vertical"
