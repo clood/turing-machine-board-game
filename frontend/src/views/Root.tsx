@@ -195,7 +195,7 @@ const Root: FC = () => {
             </IconButton>
             <IconButton
               aria-label="github"
-              href="https://github.com/cpasoft/turing-machine-board-game-solver"
+              href="https://github.com/clood/turing-machine-board-game"
               target="_blank"
             >
               <GitHubIcon />
