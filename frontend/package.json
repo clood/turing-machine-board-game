@@ -2,7 +2,7 @@
   "name": "turing-machine-interactive-sheet",
   "version": "0.25.0",
   "private": true,
-  "homepage": "https://cpasoft.github.io/turing-machine-board-game-solver",
+  "homepage": "https://clood.github.io/turing-machine-board-game",
   "dependencies": {
     "@emotion/react": "^11.10.6",
     "@emotion/styled": "^11.10.6",
