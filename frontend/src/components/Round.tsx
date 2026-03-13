@@ -10,8 +10,9 @@ import { alpha, useTheme } from "@mui/material/styles";
 import { useAppDispatch } from "hooks/useAppDispatch";
 import { useAppSelector } from "hooks/useAppSelector";
 import { FC } from "react";
-import { RoundsState, roundsActions } from "store/slices/roundsSlice";
 import { verifySingleQuery } from "deductions";
+import { alertActions } from "store/slices/alertSlice";
+import { RoundsState, roundsActions } from "store/slices/roundsSlice";
 import ShapeIcon from "./ShapeIcon";
 import SingleCharLabel from "./SingleCharLabel";
 import TextField from "./TextField";
@@ -26,37 +27,10 @@ const Round: FC<Props> = ({ round, index }) => {
   const theme = useTheme();
   const state = useAppSelector((state) => state);
 
-  // Check if the round has a complete 3-digit code (all digits between 1-5)
-  const hasCompleteCode = round.code.every(
-    (c) => c.digit !== null && c.digit >= 1 && c.digit <= 5
-  );
-
-  const handleVerifierClick = async (query: RoundsState[number]["queries"][number]) => {
-    if (query.state === "unknown" && hasCompleteCode) {
-      // Build the code array from the round
-      const code = round.code.map((c) => c.digit as number);
-
-      // Auto-verify using the WASM solver
-      const result = await verifySingleQuery(state, code, query.verifier);
-
-      dispatch(
-        roundsActions.setQueryState({
-          index,
-          verifier: query.verifier,
-          newState: result,
-        })
-      );
-    } else {
-      // Fallback to the original toggle behavior (for non-unknown states
-      // or when code is incomplete)
-      dispatch(
-        roundsActions.updateQueryState({
-          index,
-          verifier: query.verifier,
-        })
-      );
-    }
-  };
+  const codeDigits = round.code.map((c) => c.digit);
+  const hasCompleteCode =
+    codeDigits.length === 3 &&
+    codeDigits.every((d) => d !== null && d >= 1 && d <= 5);
 
   return (
     <Box>
@@ -93,6 +67,7 @@ const Round: FC<Props> = ({ round, index }) => {
           </Grid>
         ))}
       </Grid>
+
       <Box mt={0.5}>
         <Grid container spacing={0.5}>
           {round.queries.map((query) => (
@@ -116,7 +91,57 @@ const Round: FC<Props> = ({ round, index }) => {
                     query.verifier === "A" ? 2 : 0
                   ),
                 }}
-                onClick={() => handleVerifierClick(query)}
+                onClick={async () => {
+                  // (1) Code incomplete => toast 3s, do not change state (stay unknown)
+                  if (!hasCompleteCode) {
+                    dispatch(
+                      alertActions.openAlert({
+                        level: "info",
+                        message:
+                          "Veuillez saisir les 3 chiffres de cette manche pour pouvoir vérifier une lettre.",
+                      })
+                    );
+                    return;
+                  }
+
+                  // (3) Already verified => toast 3s, keep current state
+                  if (query.state !== "unknown") {
+                    dispatch(
+                      alertActions.openAlert({
+                        level: "info",
+                        message:
+                          "Cette lettre a déjà été vérifiée pour cette manche.",
+                      })
+                    );
+                    return;
+                  }
+
+                  // Code complete + unknown => auto verify and set solved/unsolved
+                  const code = codeDigits as number[];
+                  const newState = await verifySingleQuery(
+                    state,
+                    code,
+                    query.verifier
+                  );
+
+                  // updateQueryState: unknown -> unsolved
+                  dispatch(
+                    roundsActions.updateQueryState({
+                      index,
+                      verifier: query.verifier,
+                    })
+                  );
+
+                  // if solved => unsolved -> solved (second toggle)
+                  if (newState === "solved") {
+                    dispatch(
+                      roundsActions.updateQueryState({
+                        index,
+                        verifier: query.verifier,
+                      })
+                    );
+                  }
+                }}
               >
                 <Box width={1}>
                   <Box
@@ -137,9 +162,7 @@ const Round: FC<Props> = ({ round, index }) => {
                           />
                         )}
                         {query.state === "solved" && (
-                          <SolvedIcon
-                            sx={{ color: theme.palette.primary.dark }}
-                          />
+                          <SolvedIcon sx={{ color: theme.palette.primary.dark }} />
                         )}
                         {query.state === "unsolved" && (
                           <UnsolvedIcon
@@ -155,6 +178,7 @@ const Round: FC<Props> = ({ round, index }) => {
           ))}
         </Grid>
       </Box>
+
       {round.isPristine && (
         <Box>
           <Box mt={2}>
@@ -173,6 +197,7 @@ const Round: FC<Props> = ({ round, index }) => {
           </Box>
         </Box>
       )}
+
       <Box my={2}>
         <Divider />
       </Box>
