@@ -8,8 +8,10 @@ import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import { alpha, useTheme } from "@mui/material/styles";
 import { useAppDispatch } from "hooks/useAppDispatch";
+import { useAppSelector } from "hooks/useAppSelector";
 import { FC } from "react";
 import { RoundsState, roundsActions } from "store/slices/roundsSlice";
+import { verifySingleQuery } from "deductions";
 import ShapeIcon from "./ShapeIcon";
 import SingleCharLabel from "./SingleCharLabel";
 import TextField from "./TextField";
@@ -22,6 +24,39 @@ type Props = {
 const Round: FC<Props> = ({ round, index }) => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
+  const state = useAppSelector((state) => state);
+
+  // Check if the round has a complete 3-digit code (all digits between 1-5)
+  const hasCompleteCode = round.code.every(
+    (c) => c.digit !== null && c.digit >= 1 && c.digit <= 5
+  );
+
+  const handleVerifierClick = async (query: RoundsState[number]["queries"][number]) => {
+    if (query.state === "unknown" && hasCompleteCode) {
+      // Build the code array from the round
+      const code = round.code.map((c) => c.digit as number);
+
+      // Auto-verify using the WASM solver
+      const result = await verifySingleQuery(state, code, query.verifier);
+
+      dispatch(
+        roundsActions.setQueryState({
+          index,
+          verifier: query.verifier,
+          newState: result,
+        })
+      );
+    } else {
+      // Fallback to the original toggle behavior (for non-unknown states
+      // or when code is incomplete)
+      dispatch(
+        roundsActions.updateQueryState({
+          index,
+          verifier: query.verifier,
+        })
+      );
+    }
+  };
 
   return (
     <Box>
@@ -81,14 +116,7 @@ const Round: FC<Props> = ({ round, index }) => {
                     query.verifier === "A" ? 2 : 0
                   ),
                 }}
-                onClick={() => {
-                  dispatch(
-                    roundsActions.updateQueryState({
-                      index,
-                      verifier: query.verifier,
-                    })
-                  );
-                }}
+                onClick={() => handleVerifierClick(query)}
               >
                 <Box width={1}>
                   <Box
