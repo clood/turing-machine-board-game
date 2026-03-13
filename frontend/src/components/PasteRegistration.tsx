@@ -19,7 +19,7 @@ import { parse as parseProblemBook } from "parsing/problem-book";
 const PasteRegistration: FC = () => {
   const dispatch = useAppDispatch();
   const registration = useAppSelector((state) => state.registration);
-  const [cardText, setCardText] = useState("");
+  const [cardText, setCardText] = useState("1,#A46 NXF,->,2,5,8,12,P585,P441,P651,P754");
   const [showNotFound, setShowNotFound] = useState(false);
   const theme = useTheme();
 
@@ -74,8 +74,7 @@ const PasteRegistration: FC = () => {
         >
           Could not parse the game setup. Did you copy&paste the whole setup
           from <a href="https://turingmachine.info/">turingmachine.info</a> or
-          the{" "}
-          <a href="https://boardgamegeek.com/filepage/251409/book-8500-problems-offline-or-analog-use">
+          the <a href="https://boardgamegeek.com/filepage/251409/book-8500-problems-offline-or-analog-use">
             problem book
           </a>
           ?
@@ -90,15 +89,13 @@ const PasteRegistration: FC = () => {
         <Alert severity="info">
           You can paste a game setup string in the following text box. Supported
           methods are: <br />
-          1. You can copy a generated game from{" "}
-          <a href="https://turingmachine.info/">turingmachine.info</a>. The
+          1. You can copy a generated game from <a href="https://turingmachine.info/">turingmachine.info</a>. The
           copied text needs to include the "#" and all the cards and verifiers.
           <br />
-          2. You can copy from the{" "}
-          <a href="https://boardgamegeek.com/filepage/251409/book-8500-problems-offline-or-analog-use">
+          2. You can copy from the <a href="https://boardgamegeek.com/filepage/251409/book-8500-problems-offline-or-analog-use">
             problem book
-          </a>
-          . Be sure to include the whole problem line.
+          </a>.
+          Be sure to include the whole problem line.
         </Alert>
         <Typography>Paste Game Setup</Typography>
         <TextField
