@@ -47,6 +47,7 @@ const Round: FC<Props> = ({ round, index }) => {
                   : undefined
               }
               value={code.digit}
+              placeHolder="?"
               onChange={(value) => {
                 dispatch(
                   roundsActions.updateCodeDigit({
