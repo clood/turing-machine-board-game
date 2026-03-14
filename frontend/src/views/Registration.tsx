@@ -8,20 +8,46 @@ import FormLabel from "@mui/material/FormLabel";
 import TextField from "components/TextField";
 import { useAppDispatch } from "hooks/useAppDispatch";
 import { useAppSelector } from "hooks/useAppSelector";
-import { FC, useState } from "react";
+import { FC, useEffect, useState } from "react";
 import { registrationActions } from "store/slices/registrationSlice";
+import { roundsActions } from "store/slices/roundsSlice";
+import { commentsActions } from "store/slices/commentsSlice";
+import { digitCodeActions } from "store/slices/digitCodeSlice";
 import HashCodeRegistration from "components/HashCodeRegistration";
 import ManualRegistration from "components/ManualRegistration";
 import { Card } from "@mui/material";
 import PasteRegistration from "components/PasteRegistration";
+import AutoRegistration from "components/AutoRegistration";
+import { parse as parseTuringInfo } from "parsing/turing-copy-paste";
+import { parse as parseProblemBook } from "parsing/problem-book";
 
 const Registration: FC = () => {
   const dispatch = useAppDispatch();
   const registration = useAppSelector((state) => state.registration);
   const [registrationMethod, setRegristationMethod] = useState("paste");
+
   function changeRegistrationMethod(e: React.ChangeEvent<HTMLInputElement>) {
     setRegristationMethod((e.target as HTMLInputElement).value);
   }
+
+  // Handle ?party_info= URL param on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const partyInfo = params.get("party_info");
+    if (partyInfo) {
+      const cardText = decodeURIComponent(partyInfo);
+      const problem = parseTuringInfo(cardText) || parseProblemBook(cardText);
+      if (problem) {
+        dispatch(registrationActions.updateHash(problem.code.toUpperCase()));
+        dispatch(roundsActions.reset());
+        dispatch(commentsActions.reset());
+        dispatch(digitCodeActions.reset());
+        dispatch(registrationActions.fetchDone());
+        dispatch(commentsActions.setCards(problem));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Box
@@ -66,6 +92,7 @@ const Registration: FC = () => {
               control={<Radio />}
               label="Hashcode"
             />
+            <FormControlLabel value="auto" control={<Radio />} label="Auto" />
           </RadioGroup>
         </FormControl>
       )}
@@ -78,6 +105,9 @@ const Registration: FC = () => {
         </Card>
       )}
       {registrationMethod === "paste" && <PasteRegistration />}
+      {registrationMethod === "auto" && registration.status === "new" && (
+        <AutoRegistration />
+      )}
     </Box>
   );
 };
