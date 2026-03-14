@@ -1,9 +1,12 @@
 import { Typography } from "@mui/material";
 import Box from "@mui/material/Box";
 import HashIcon from "@mui/icons-material/NumbersRounded";
+import ShareIcon from "@mui/icons-material/ShareRounded";
 import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
+import Tooltip from "@mui/material/Tooltip";
 import { alpha, useTheme } from "@mui/material/styles";
 import TextField from "components/TextField";
 import { useAppDispatch } from "hooks/useAppDispatch";
@@ -21,6 +24,7 @@ const PasteRegistration: FC = () => {
   const registration = useAppSelector((state) => state.registration);
   const [cardText, setCardText] = useState("1,#A46 NXF,->,2,5,8,12,P585,P441,P651,P754");
   const [showNotFound, setShowNotFound] = useState(false);
+  const [showCopied, setShowCopied] = useState(false);
   const theme = useTheme();
 
   function onSubmit() {
@@ -29,6 +33,8 @@ const PasteRegistration: FC = () => {
       setShowNotFound(true);
       return;
     }
+    // Stocker le party_info original pour le partage
+    dispatch(registrationActions.updatePartyInfo(cardText));
     setCardText("");
     dispatch(registrationActions.updateHash(problem.code.toUpperCase()));
     dispatch(roundsActions.reset());
@@ -38,20 +44,66 @@ const PasteRegistration: FC = () => {
     dispatch(commentsActions.setCards(problem));
   }
 
+  const onShare = () => {
+    const baseUrl =
+      process.env.PUBLIC_URL
+        ? `${window.location.origin}${process.env.PUBLIC_URL}/`
+        : `${window.location.origin}/`;
+    const url = `${baseUrl}?party_info=${encodeURIComponent(registration.partyInfo)}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setShowCopied(true);
+    });
+  };
+
+  // Quand la partie est configurée, afficher le hash + icône de partage
   if (registration.status !== "new") {
     return (
-      <TextField
-        prefixId="registration__hash"
-        disabled={true}
-        iconRender={<HashIcon />}
-        value={registration.hash}
-        maxChars={10}
-        customRadius={
-          registration.status === "ready"
-            ? theme.spacing(0, 0, 2, 2)
-            : undefined
-        }
-      />
+      <>
+        {/* Toast "lien copié" */}
+        <Snackbar
+          anchorOrigin={{ horizontal: "center", vertical: "top" }}
+          open={showCopied}
+          autoHideDuration={3000}
+          onClose={() => setShowCopied(false)}
+        >
+          <Alert
+            onClose={() => setShowCopied(false)}
+            severity="success"
+            sx={{ width: "100%" }}
+            variant="filled"
+          >
+            Lien copié dans le presse-papier
+          </Alert>
+        </Snackbar>
+
+        <Box display="flex" alignItems="center">
+          <Box flex={1}>
+            <TextField
+              prefixId="registration__hash"
+              disabled={true}
+              iconRender={<HashIcon />}
+              value={registration.hash}
+              maxChars={10}
+              customRadius={
+                registration.status === "ready"
+                  ? theme.spacing(0, 0, 2, 2)
+                  : undefined
+              }
+            />
+          </Box>
+          {registration.status === "ready" && (
+            <Tooltip title="Copier le lien de partage">
+              <IconButton
+                onClick={onShare}
+                aria-label="share game link"
+                sx={{ ml: 1 }}
+              >
+                <ShareIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      </>
     );
   }
 
@@ -74,7 +126,8 @@ const PasteRegistration: FC = () => {
         >
           Could not parse the game setup. Did you copy&paste the whole setup
           from <a href="https://turingmachine.info/">turingmachine.info</a> or
-          the <a href="https://boardgamegeek.com/filepage/251409/book-8500-problems-offline-or-analog-use">
+          the{" "}
+          <a href="https://boardgamegeek.com/filepage/251409/book-8500-problems-offline-or-analog-use">
             problem book
           </a>
           ?
@@ -89,13 +142,15 @@ const PasteRegistration: FC = () => {
         <Alert severity="info">
           You can paste a game setup string in the following text box. Supported
           methods are: <br />
-          1. You can copy a generated game from <a href="https://turingmachine.info/">turingmachine.info</a>. The
+          1. You can copy a generated game from{" "}
+          <a href="https://turingmachine.info/">turingmachine.info</a>. The
           copied text needs to include the "#" and all the cards and verifiers.
           <br />
-          2. You can copy from the <a href="https://boardgamegeek.com/filepage/251409/book-8500-problems-offline-or-analog-use">
+          2. You can copy from the{" "}
+          <a href="https://boardgamegeek.com/filepage/251409/book-8500-problems-offline-or-analog-use">
             problem book
-          </a>.
-          Be sure to include the whole problem line.
+          </a>
+          . Be sure to include the whole problem line.
         </Alert>
         <Typography>Paste Game Setup</Typography>
         <TextField
