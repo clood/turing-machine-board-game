@@ -22,7 +22,7 @@ import { parse as parseProblemBook } from "parsing/problem-book";
 const PasteRegistration: FC = () => {
   const dispatch = useAppDispatch();
   const registration = useAppSelector((state) => state.registration);
-  const [cardText, setCardText] = useState("1,#A46 NXF,->,2,5,8,12,P585,P441,P651,P754");
+  const [cardText, setCardText] = useState("");
   const [showNotFound, setShowNotFound] = useState(false);
   const [showCopied, setShowCopied] = useState(false);
   const theme = useTheme();
