@@ -8,6 +8,10 @@ import Paper from "@mui/material/Paper";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import MagnifyIcon from "@mui/icons-material/ManageSearchRounded";
+import { useAppDispatch } from "hooks/useAppDispatch";
+import { useAppSelector } from "hooks/useAppSelector";
+import { manualCodeListActions } from "store/slices/manualCodeListSlice";
+import type { CodeStateValue } from "store/slices/manualCodeListSlice";
 
 // Les 125 codes (111 à 555), groupés par premier chiffre
 function buildAllCodes(): { [key: number]: string[] } {
@@ -28,34 +32,22 @@ function buildAllCodes(): { [key: number]: string[] } {
   return result;
 }
 
-// 3 états : "normal" | "greyed" | "outlined"
-type CodeState = "normal" | "greyed" | "outlined";
-
-const NEXT_STATE: Record<CodeState, CodeState> = {
-  normal: "greyed",
-  greyed: "outlined",
-  outlined: "normal",
-};
-
 const allCodes = buildAllCodes();
 
 export function ManualCodeList() {
   const { theme } = usePaletteMode();
+  const dispatch = useAppDispatch();
+  const codeStates = useAppSelector((state) => state.manualCodeList);
 
   const [expanded, setExpanded] = useState(false);
   const [hide, setHide] = useState(false);
 
-  // Map code → état
-  const [codeStates, setCodeStates] = useState<Record<string, CodeState>>({});
-
-  function getState(code: string): CodeState {
+  function getState(code: string): CodeStateValue {
     return codeStates[code] ?? "normal";
   }
 
   function handleClick(code: string) {
-    const current = getState(code);
-    const next = NEXT_STATE[current];
-    setCodeStates((prev) => ({ ...prev, [code]: next }));
+    dispatch(manualCodeListActions.toggleCode(code));
   }
 
   function toggleExpanded() {
@@ -107,12 +99,10 @@ export function ManualCodeList() {
                           cursor: "pointer",
                           display: "inline-block",
                           userSelect: "none",
-                          // État grisé : texte gris clair
                           color:
                             state === "greyed"
                               ? theme.palette.text.disabled
                               : theme.palette.text.primary,
-                          // État entouré : bordure noire, texte noir forcé
                           border:
                             state === "outlined"
                               ? `1.5px solid ${theme.palette.text.primary}`
