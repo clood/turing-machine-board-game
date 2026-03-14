@@ -35,6 +35,7 @@ import { settingsActions } from "store/slices/settingsSlice";
 import { alertActions } from "store/slices/alertSlice";
 import { useCanBeSaved } from "hooks/useCanBeSaved";
 import { PossibleCodes } from "components/PossibleCodes";
+import { ManualCodeList } from "components/ManualCodeList";
 
 const Root: FC = () => {
   const { theme, togglePaletteMode } = usePaletteMode();
@@ -227,11 +228,23 @@ const Root: FC = () => {
               <Rounds />
             </Grid>
             <Grid item lg={6} md={6} xs={12}>
-              {isUpLg ? <Comments /> : <DigitCode />}
+              {isUpLg ? (
+                <>
+                  <ManualCodeList />
+                  <Comments />
+                </>
+              ) : (
+                <DigitCode />
+              )}
             </Grid>
             <Grid item lg={3} xs={12}>
-              {isUpLg ? <DigitCode /> : <Comments />}
-              <PossibleCodes />
+              {isUpLg ? <DigitCode /> : (
+                <>
+                   <ManualCodeList />
+                   <Comments />
+                </>
+               )}
+               <PossibleCodes />
             </Grid>
           </Grid>
         </Collapse>
