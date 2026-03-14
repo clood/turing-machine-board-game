@@ -55,7 +55,7 @@ const Registration: FC = () => {
     <Box
       id="registration-section"
       component="section"
-      width={480}
+      width={350}
       margin="auto"
       mb={2}
     >
