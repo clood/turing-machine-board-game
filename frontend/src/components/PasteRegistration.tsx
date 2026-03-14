@@ -18,6 +18,7 @@ import { registrationActions } from "store/slices/registrationSlice";
 import { roundsActions } from "store/slices/roundsSlice";
 import { parse as parseTuringInfo } from "parsing/turing-copy-paste";
 import { parse as parseProblemBook } from "parsing/problem-book";
+import { manualCodeListActions } from "store/slices/manualCodeListSlice";
 
 const PasteRegistration: FC = () => {
   const dispatch = useAppDispatch();
@@ -40,6 +41,7 @@ const PasteRegistration: FC = () => {
     dispatch(roundsActions.reset());
     dispatch(commentsActions.reset());
     dispatch(digitCodeActions.reset());
+    dispatch(manualCodeListActions.reset());
     dispatch(registrationActions.fetchDone());
     dispatch(commentsActions.setCards(problem));
   }
