@@ -118,6 +118,7 @@ export function ManualCodeList() {
                           codeState === "greyed"
                             ? theme.palette.text.disabled
                             : theme.palette.text.primary,
+                        textDecoration: codeState === "greyed" ? "line-through" : "none",
                         border:
                           codeState === "outlined"
                             ? `1.5px solid ${theme.palette.text.primary}`
