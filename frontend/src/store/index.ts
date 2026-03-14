@@ -6,6 +6,7 @@ import rounds from "./slices/roundsSlice";
 import saves from "./slices/savesSlice";
 import settings from "./slices/settingsSlice";
 import alert from "./slices/alertSlice";
+import manualCodeList from "./slices/manualCodeListSlice";
 import { loadState, saveState } from "./storage";
 
 const preloadedState = loadState();
@@ -17,6 +18,7 @@ const reducer = {
   saves,
   settings,
   alert,
+  manualCodeList,
 };
 
 export const store = configureStore({
