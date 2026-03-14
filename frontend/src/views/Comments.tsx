@@ -12,7 +12,7 @@ const Comments: FC = () => {
   return (
     <Paper
       component="section"
-      sx={{width: isUpMd ? 656 : "100%", margin: theme.spacing(0, "auto", 2)}}
+      sx={{width: isUpMd ? 656 : 320 , margin: theme.spacing(0, "auto", 2)}}
     >
       <Box p={2} mb={2}>
         <Grid container spacing={2}>
