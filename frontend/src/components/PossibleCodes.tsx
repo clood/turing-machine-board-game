@@ -61,29 +61,38 @@ export function PossibleCodes() {
       <Box p={2} mt={2}>
         <Box display="flex" justifyContent={"space-between"} zIndex={1}>
           <Button onClick={toggleExpanded}>
-            {expanded ? "Hide code list" : "Show code list"}
+            {expanded ? "Hide code list computed" : "Show code list computed"}
           </Button>
-          {expanded &&
+          {expanded && (
             <IconButton onClick={toggleHidden} disabled={!expanded}>
-              <Tooltip id="button-report" title={hide ? "Show impossible numbers" : "Hide impossible numbers"}>
-                <MagnifyIcon/>
+              <Tooltip
+                id="button-report"
+                title={
+                  hide
+                    ? "Show impossible numbers"
+                    : "Hide impossible numbers"
+                }
+              >
+                <MagnifyIcon />
               </Tooltip>
             </IconButton>
-          }
+          )}
         </Box>
         <Collapse in={expanded}>
           <Grid container spacing={8}>
             {[1, 2, 3, 4, 5].map((number) => (
               <Grid item xs={2} key={number}>
-                {possibleCodes[number].map(({code, possible}) => (
-                  <Grid item xs={2}
-                        hidden={!possible && hide}
-                        key={code}
-                        style={{
-                          color: possible
-                            ? theme.palette.text.primary
-                            : theme.palette.text.disabled,
-                        }}
+                {possibleCodes[number].map(({ code, possible }) => (
+                  <Grid
+                    item
+                    xs={2}
+                    hidden={!possible && hide}
+                    key={code}
+                    style={{
+                      color: possible
+                        ? theme.palette.text.primary
+                        : theme.palette.text.disabled,
+                    }}
                   >
                     {code}
                   </Grid>
