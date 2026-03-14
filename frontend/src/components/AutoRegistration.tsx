@@ -1,20 +1,16 @@
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import { alpha } from "@mui/material/styles";
 import { useAppDispatch } from "hooks/useAppDispatch";
-import { FC } from "react";
+import { FC, useEffect, useState } from "react";
 import { commentsActions } from "store/slices/commentsSlice";
 import { digitCodeActions } from "store/slices/digitCodeSlice";
 import { registrationActions } from "store/slices/registrationSlice";
 import { roundsActions } from "store/slices/roundsSlice";
 import { parse as parseTuringInfo } from "parsing/turing-copy-paste";
 import { parse as parseProblemBook } from "parsing/problem-book";
-
-// Import CSV as raw text (requires either a loader or manual fetch)
-// We'll use a static import approach via require for CRA
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const rawCsv: string = require("../turing_machine.csv");
 
 interface CsvRow {
   level: string;
@@ -34,15 +30,6 @@ function parseCsv(csv: string): CsvRow[] {
   });
 }
 
-const rows = parseCsv(rawCsv);
-
-const levels: string[] = [];
-for (const row of rows) {
-  if (!levels.includes(row.level)) {
-    levels.push(row.level);
-  }
-}
-
 const LEVEL_LABELS: Record<string, string> = {
   easy: "Easy",
   classic: "Classic",
@@ -57,6 +44,42 @@ const LEVEL_LABELS: Record<string, string> = {
 
 const AutoRegistration: FC = () => {
   const dispatch = useAppDispatch();
+  const [rows, setRows] = useState<CsvRow[]>([]);
+  const [levels, setLevels] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    // Le CSV est servi depuis le dossier public/
+    // Sur GitHub Pages : /turing-machine-board-game/turing_machine.csv
+    // En local : /turing_machine.csv
+    const csvUrl =
+      process.env.PUBLIC_URL
+        ? `${process.env.PUBLIC_URL}/turing_machine.csv`
+        : "/turing_machine.csv";
+
+    fetch(csvUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch CSV");
+        return res.text();
+      })
+      .then((text) => {
+        const parsed = parseCsv(text);
+        setRows(parsed);
+        const uniqueLevels: string[] = [];
+        for (const row of parsed) {
+          if (!uniqueLevels.includes(row.level)) {
+            uniqueLevels.push(row.level);
+          }
+        }
+        setLevels(uniqueLevels);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError(true);
+        setLoading(false);
+      });
+  }, []);
 
   function handleLevelClick(level: string) {
     const matching = rows.filter((r) => r.level === level);
@@ -71,6 +94,22 @@ const AutoRegistration: FC = () => {
     dispatch(digitCodeActions.reset());
     dispatch(registrationActions.fetchDone());
     dispatch(commentsActions.setCards(problem));
+  }
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" pt={2}>
+        <CircularProgress size={32} />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert severity="error">
+        Could not load game setups. Please try another method.
+      </Alert>
+    );
   }
 
   return (
