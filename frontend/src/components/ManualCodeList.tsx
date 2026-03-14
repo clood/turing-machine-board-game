@@ -1,5 +1,4 @@
 import Button from "@mui/material/Button";
-import Grid from "@mui/material/Grid";
 import { usePaletteMode } from "hooks/usePaletteMode";
 import { useState } from "react";
 import Collapse from "@mui/material/Collapse";
@@ -82,44 +81,51 @@ export function ManualCodeList() {
         </Box>
 
         <Collapse in={expanded}>
-          <Grid container spacing={8}>
+          {/* 5 colonnes côte à côte via CSS grid — pas de chevauchement possible */}
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, 1fr)",
+              gap: 0,
+              mt: 1,
+            }}
+          >
             {[1, 2, 3, 4, 5].map((number) => (
-              <Grid item xs={2} key={number}>
+              <Box key={number} sx={{ display: "flex", flexDirection: "column" }}>
                 {allCodes[number].map((code) => {
-                  const state = getState(code);
-                  // Le filtre masque uniquement les grisés
-                  if (hide && state === "greyed") return null;
+                  const codeState = getState(code);
+                  if (hide && codeState === "greyed") return null;
 
                   return (
-                    <Grid item xs={2} key={code}>
-                      <Box
-                        component="span"
-                        onClick={() => handleClick(code)}
-                        sx={{
-                          cursor: "pointer",
-                          display: "inline-block",
-                          userSelect: "none",
-                          color:
-                            state === "greyed"
-                              ? theme.palette.text.disabled
-                              : theme.palette.text.primary,
-                          border:
-                            state === "outlined"
-                              ? `1.5px solid ${theme.palette.text.primary}`
-                              : "1.5px solid transparent",
-                          borderRadius: "3px",
-                          px: "2px",
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        {code}
-                      </Box>
-                    </Grid>
+                    <Box
+                      key={code}
+                      component="span"
+                      onClick={() => handleClick(code)}
+                      sx={{
+                        cursor: "pointer",
+                        userSelect: "none",
+                        lineHeight: 1.6,
+                        px: "3px",
+                        borderRadius: "3px",
+                        color:
+                          codeState === "greyed"
+                            ? theme.palette.text.disabled
+                            : theme.palette.text.primary,
+                        border:
+                          codeState === "outlined"
+                            ? `1.5px solid ${theme.palette.text.primary}`
+                            : "1.5px solid transparent",
+                        fontSize: "0.85rem",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {code}
+                    </Box>
                   );
                 })}
-              </Grid>
+              </Box>
             ))}
-          </Grid>
+          </Box>
         </Collapse>
       </Box>
     </Paper>
