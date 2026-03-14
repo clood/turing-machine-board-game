@@ -19,6 +19,7 @@ import { commentsActions } from "store/slices/commentsSlice";
 import { digitCodeActions } from "store/slices/digitCodeSlice";
 import { registrationActions } from "store/slices/registrationSlice";
 import { roundsActions } from "store/slices/roundsSlice";
+import { manualCodeListActions } from "store/slices/manualCodeListSlice";
 
 const HashCodeRegistration: FC = () => {
   const dispatch = useAppDispatch();
@@ -53,6 +54,7 @@ const HashCodeRegistration: FC = () => {
               m: number;
             } = data;
             dispatch(registrationActions.fetchDone());
+            dispatch(manualCodeListActions.reset());
             dispatch(commentsActions.setCards({ ind, fake, crypt, color, m }));
             break;
           default:
