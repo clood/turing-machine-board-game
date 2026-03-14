@@ -14,13 +14,13 @@ import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import Alert from "@mui/material/Alert";
-import CloseIcon from "@mui/icons-material/Close";
+import Snackbar from "@mui/material/Snackbar";
 import { ThemeProvider } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useAppDispatch } from "hooks/useAppDispatch";
 import { useAppSelector } from "hooks/useAppSelector";
 import { usePaletteMode } from "hooks/usePaletteMode";
-import { FC, useEffect, useState } from "react";
+import { FC, useState } from "react";
 import { useUpdateEffect } from "react-use";
 import { savesActions } from "store/slices/savesSlice";
 import Comments from "./Comments";
@@ -53,20 +53,27 @@ const Root: FC = () => {
 
   const canBeSaved = useCanBeSaved();
 
-  // Auto-dismiss alerts after 3 seconds
-  useEffect(() => {
-    if (!state.alert.open) return;
-
-    const timeout = window.setTimeout(() => {
-      dispatch(alertActions.closeAlert());
-    }, 3000);
-
-    return () => window.clearTimeout(timeout);
-  }, [state.alert.open, dispatch]);
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+
+      {/* Toast global — même mise en forme que les toasts de partage */}
+      <Snackbar
+        anchorOrigin={{ horizontal: "center", vertical: "top" }}
+        open={state.alert.open}
+        autoHideDuration={3000}
+        onClose={() => dispatch(alertActions.closeAlert())}
+      >
+        <Alert
+          onClose={() => dispatch(alertActions.closeAlert())}
+          severity={state.alert.level}
+          sx={{ width: "100%" }}
+          variant="filled"
+        >
+          {state.alert.message}
+        </Alert>
+      </Snackbar>
+
       <Box
         textAlign="center"
         position="relative"
@@ -210,24 +217,6 @@ const Root: FC = () => {
               <GitHubIcon />
             </IconButton>
           </Box>
-          <Collapse in={state.alert.open}>
-            <Alert
-              severity={state.alert.level}
-              action={
-                <IconButton
-                  aria-label="close"
-                  color="inherit"
-                  size="small"
-                  onClick={() => dispatch(alertActions.closeAlert())}
-                >
-                  <CloseIcon fontSize="inherit" />
-                </IconButton>
-              }
-              sx={{ mb: 2 }}
-            >
-              {state.alert.message}
-            </Alert>
-          </Collapse>
         </Box>
       </Box>
       <Registration />
