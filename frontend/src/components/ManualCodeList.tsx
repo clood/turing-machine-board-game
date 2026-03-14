@@ -81,17 +81,18 @@ export function ManualCodeList() {
         </Box>
 
         <Collapse in={expanded}>
-          {/* 5 colonnes côte à côte via CSS grid — pas de chevauchement possible */}
           <Box
             sx={{
               display: "grid",
               gridTemplateColumns: "repeat(5, 1fr)",
-              gap: 0,
+              // ← gap horizontal entre colonnes pour que les entourés ne se touchent pas
+              columnGap: "4px",
+              rowGap: 0,
               mt: 1,
             }}
           >
             {[1, 2, 3, 4, 5].map((number) => (
-              <Box key={number} sx={{ display: "flex", flexDirection: "column" }}>
+              <Box key={number} sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                 {allCodes[number].map((code) => {
                   const codeState = getState(code);
                   if (hide && codeState === "greyed") return null;
@@ -104,8 +105,14 @@ export function ManualCodeList() {
                       sx={{
                         cursor: "pointer",
                         userSelect: "none",
-                        lineHeight: 1.6,
-                        px: "3px",
+                        // hauteur fixe + flexbox pour centrer le texte verticalement et horizontalement
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "100%",
+                        // marge verticale de 1px entre chaque code pour éviter
+                        // que les entourés du dessus et du dessous se touchent
+                        my: "1px",
                         borderRadius: "3px",
                         color:
                           codeState === "greyed"
@@ -115,8 +122,9 @@ export function ManualCodeList() {
                           codeState === "outlined"
                             ? `1.5px solid ${theme.palette.text.primary}`
                             : "1.5px solid transparent",
-                        fontSize: "0.85rem",
+                        fontSize: "0.82rem",
                         fontFamily: "monospace",
+                        lineHeight: 1.6,
                       }}
                     >
                       {code}
