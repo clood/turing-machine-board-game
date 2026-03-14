@@ -50,13 +50,9 @@ const AutoRegistration: FC = () => {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    // Le CSV est servi depuis le dossier public/
-    // Sur GitHub Pages : /turing-machine-board-game/turing_machine.csv
-    // En local : /turing_machine.csv
-    const csvUrl =
-      process.env.PUBLIC_URL
-        ? `${process.env.PUBLIC_URL}/turing_machine.csv`
-        : "/turing_machine.csv";
+    const csvUrl = process.env.PUBLIC_URL
+      ? `${process.env.PUBLIC_URL}/turing_machine.csv`
+      : "/turing_machine.csv";
 
     fetch(csvUrl)
       .then((res) => {
@@ -88,6 +84,8 @@ const AutoRegistration: FC = () => {
     const cardText = random.info;
     const problem = parseTuringInfo(cardText) || parseProblemBook(cardText);
     if (problem === null) return;
+    // Stocker le party_info original pour le partage
+    dispatch(registrationActions.updatePartyInfo(cardText));
     dispatch(registrationActions.updateHash(problem.code.toUpperCase()));
     dispatch(roundsActions.reset());
     dispatch(commentsActions.reset());
