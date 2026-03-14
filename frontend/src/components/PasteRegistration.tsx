@@ -56,6 +56,7 @@ const PasteRegistration: FC = () => {
   };
 
   // Quand la partie est configurée, afficher le hash + icône de partage
+    // Quand la partie est configurée, afficher le hash + icône de partage
   if (registration.status !== "new") {
     return (
       <>
@@ -76,36 +77,46 @@ const PasteRegistration: FC = () => {
           </Alert>
         </Snackbar>
 
-        <Box display="flex" alignItems="center">
-          <Box flex={1}>
-            <TextField
-              prefixId="registration__hash"
-              disabled={true}
-              iconRender={<HashIcon />}
-              value={registration.hash}
-              maxChars={10}
-              customRadius={
-                registration.status === "ready"
-                  ? theme.spacing(0, 0, 2, 2)
-                  : undefined
-              }
-            />
-          </Box>
+        {/* Wrapper relatif identique à ce que TextField crée en interne */}
+        <Box position="relative">
+          <TextField
+            prefixId="registration__hash"
+            disabled={true}
+            iconRender={<HashIcon />}
+            value={registration.hash}
+            maxChars={10}
+            customRadius={
+              registration.status === "ready"
+                ? theme.spacing(0, 0, 2, 2)
+                : undefined
+            }
+          />
+          {/* Icône partage superposée à droite, exactement comme le bouton clear */}
           {registration.status === "ready" && (
-            <Tooltip title="Copier le lien de partage">
-              <IconButton
-                onClick={onShare}
-                aria-label="share game link"
-                sx={{ ml: 1 }}
-              >
-                <ShareIcon />
-              </IconButton>
-            </Tooltip>
+            <Box
+              alignItems="center"
+              display="flex"
+              height={48}
+              right={4}
+              position="absolute"
+              top={0}
+            >
+              <Tooltip title="Copier le lien de partage">
+                <IconButton
+                  color="primary"
+                  onClick={onShare}
+                  aria-label="share game link"
+                >
+                  <ShareIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
           )}
         </Box>
       </>
     );
   }
+  
 
   return (
     <>
