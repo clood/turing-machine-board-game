@@ -20,6 +20,7 @@ import PasteRegistration from "components/PasteRegistration";
 import AutoRegistration from "components/AutoRegistration";
 import { parse as parseTuringInfo } from "parsing/turing-copy-paste";
 import { parse as parseProblemBook } from "parsing/problem-book";
+import { manualCodeListActions } from "store/slices/manualCodeListSlice";
 
 const Registration: FC = () => {
   const dispatch = useAppDispatch();
@@ -44,6 +45,7 @@ const Registration: FC = () => {
         dispatch(roundsActions.reset());
         dispatch(commentsActions.reset());
         dispatch(digitCodeActions.reset());
+        dispatch(manualCodeListActions.reset());
         dispatch(registrationActions.fetchDone());
         dispatch(commentsActions.setCards(problem));
       }
