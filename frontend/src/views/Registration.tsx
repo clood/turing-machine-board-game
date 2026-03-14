@@ -38,6 +38,8 @@ const Registration: FC = () => {
       const cardText = decodeURIComponent(partyInfo);
       const problem = parseTuringInfo(cardText) || parseProblemBook(cardText);
       if (problem) {
+        // Stocker le party_info original pour permettre le repartage
+        dispatch(registrationActions.updatePartyInfo(cardText));
         dispatch(registrationActions.updateHash(problem.code.toUpperCase()));
         dispatch(roundsActions.reset());
         dispatch(commentsActions.reset());
@@ -46,7 +48,7 @@ const Registration: FC = () => {
         dispatch(commentsActions.setCards(problem));
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -104,7 +106,9 @@ const Registration: FC = () => {
           </Box>
         </Card>
       )}
-      {registrationMethod === "paste" && <PasteRegistration />}
+      {(registrationMethod === "paste" || registrationMethod === "auto") && (
+        <PasteRegistration />
+      )}
       {registrationMethod === "auto" && registration.status === "new" && (
         <AutoRegistration />
       )}
