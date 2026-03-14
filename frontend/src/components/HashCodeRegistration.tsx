@@ -2,11 +2,14 @@ import LoadIcon from "@mui/icons-material/HourglassTopRounded";
 import HashIcon from "@mui/icons-material/NumbersRounded";
 import OkIcon from "@mui/icons-material/ThumbUpAltRounded";
 import SearchIcon from "@mui/icons-material/TravelExploreRounded";
+import ShareIcon from "@mui/icons-material/ShareRounded";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Collapse from "@mui/material/Collapse";
+import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
+import Tooltip from "@mui/material/Tooltip";
 import { alpha, useTheme } from "@mui/material/styles";
 import TextField from "components/TextField";
 import { useAppDispatch } from "hooks/useAppDispatch";
@@ -21,6 +24,7 @@ const HashCodeRegistration: FC = () => {
   const dispatch = useAppDispatch();
   const registration = useAppSelector((state) => state.registration);
   const [showNotFound, setShowNotFound] = useState(false);
+  const [showCopied, setShowCopied] = useState(false);
   const theme = useTheme();
 
   const onSubmit = () => {
@@ -63,6 +67,14 @@ const HashCodeRegistration: FC = () => {
       });
   };
 
+  const onShare = () => {
+    const baseUrl = "https://clood.github.io/turing-machine-board-game/";
+    const url = `${baseUrl}?party_info=${encodeURIComponent(registration.hash)}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setShowCopied(true);
+    });
+  };
+
   return (
     <>
       <Snackbar
@@ -83,6 +95,24 @@ const HashCodeRegistration: FC = () => {
           {registration.hash} Game ID not found!
         </Alert>
       </Snackbar>
+
+      {/* Share toast */}
+      <Snackbar
+        anchorOrigin={{ horizontal: "center", vertical: "top" }}
+        open={showCopied}
+        autoHideDuration={3000}
+        onClose={() => setShowCopied(false)}
+      >
+        <Alert
+          onClose={() => setShowCopied(false)}
+          severity="success"
+          sx={{ width: "100%" }}
+          variant="filled"
+        >
+          Lien copié !
+        </Alert>
+      </Snackbar>
+
       {registration.status === "new" && (
         <Box pt={0.5} pb={0.5}>
           <Alert severity="warning">
@@ -156,6 +186,17 @@ const HashCodeRegistration: FC = () => {
           </Collapse>
         </Box>
       </form>
+
+      {/* Share button — only when game is ready */}
+      {registration.status === "ready" && (
+        <Box display="flex" justifyContent="flex-end" pt={0.5}>
+          <Tooltip title="Copier le lien de partage">
+            <IconButton onClick={onShare} aria-label="share game link">
+              <ShareIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
     </>
   );
 };
