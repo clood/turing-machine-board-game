@@ -3,12 +3,14 @@ import { PayloadAction, createSlice } from "@reduxjs/toolkit";
 export type RegistrationState = {
   name: string;
   hash: string;
+  partyInfo: string; // ← la chaîne complète pour le partage
   status: "new" | "fetch" | "ready";
 };
 
 const initialState: RegistrationState = {
   name: "",
   hash: "",
+  partyInfo: "",
   status: "new",
 };
 
@@ -19,6 +21,7 @@ export const registrationSlice = createSlice({
     load: (_, action: PayloadAction<RegistrationState>) => action.payload,
     reset: (state) => {
       state.hash = "";
+      state.partyInfo = "";
       state.status = "new";
     },
     fetch: (state) => ({
@@ -43,6 +46,9 @@ export const registrationSlice = createSlice({
         .split(/(.{3})/)
         .filter((e) => e)
         .join(" ");
+    },
+    updatePartyInfo: (state, action: PayloadAction<string>) => {
+      state.partyInfo = action.payload;
     },
   },
 });
