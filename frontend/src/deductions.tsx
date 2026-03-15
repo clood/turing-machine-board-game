@@ -14,49 +14,9 @@ const myWorker = new Worker(
   "/turing-machine-board-game-solver/wasm/worker.mjs"
 );
 
-function checkDigits(state: RootState, possibleCodes: string[]) {
-  const digits = { triangle: new Set(), square: new Set(), circle: new Set() };
-  for (const code of possibleCodes) {
-    digits.triangle.add(Number(code[0]));
-    digits.square.add(Number(code[1]));
-    digits.circle.add(Number(code[2]));
-  }
-  for (const { shape, digit } of state.digitCode) {
-    // @ts-ignore
-    if (digits[shape].has(digit)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function checkVerifiers(state: RootState, possibleVerifiers: number[][]) {
-  for (let i = 0; i < state.comments.length; i += 1) {
-    const firstCard = state.comments[i].criteriaCards[0];
-    for (const criteria of firstCard.irrelevantCriteria) {
-      if (possibleVerifiers[i].includes(criteria - 1)) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-function checkLetters(state: RootState, possibleLetters: string[][]) {
-  if (!state.comments[0].nightmare) return true;
-  for (let i = 0; i < state.comments.length; i += 1) {
-    const letters = state.comments[i].letters;
-    for (const letter of letters) {
-      if (letter.isIrrelevant && possibleLetters[i].includes(letter.letter)) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
 /**
- * LOGIQUE DE VÉRIFICATION POUR LES TESTS OK/KO
+ * LOGIQUE DE VÉRIFICATION POUR LES TESTS PAR LETTRE (OK/KO)
+ * Compare le code saisi à la loi unique de la solution actuelle.
  */
 export async function verifySingleQuery(
   state: RootState,
@@ -67,12 +27,14 @@ export async function verifySingleQuery(
   const slotIndex = verifier.charCodeAt(0) - "A".charCodeAt(0);
   const mode = state.comments[0].nightmare ? 2 : (state.comments[0].criteriaCards.length > 1 ? 1 : 0);
 
-  const verifierCards = [
-    ...state.comments.map(({ criteriaCards }) => criteriaCards[0].id),
-    ...(mode === 1 ? state.comments.map(({ criteriaCards }) => criteriaCards[1].id) : []),
-  ];
+  const verifierCards = state.comments.map(({ criteriaCards }) => criteriaCards[0].id);
+  if (mode === 1) {
+    state.comments.forEach(({ criteriaCards }) => {
+      if (criteriaCards[1]) verifierCards.push(criteriaCards[1].id);
+    });
+  }
 
-  // 1. On trouve d'abord quelle est l'UNIQUE loi valide pour le setup actuel (la solution 532)
+  // 1. Identification de la loi active (basée sur la solution unique du setup)
   const solverResult = await waitForWorker({
     type: "solve_wasm",
     verifierCards,
@@ -81,16 +43,13 @@ export async function verifySingleQuery(
     numVerifiers,
   });
 
-  // possibleVerifiers[slotIndex] contient l'index de la loi active (ex: [0])
   const activeLaws = solverResult.possibleVerifiers?.[slotIndex] || [];
-
   if (activeLaws.length === 0) return "unsolved";
 
-  // 2. On teste si le code saisi respecte cette loi précise
-  // On utilise get_possible_codes sur la carte du vérificateur avec seulement la loi active
+  // 2. Test du code contre cette loi précise
   const testResult = await waitForWorker({
     type: "get_possible_codes",
-    cards: [[verifierCards[slotIndex]]],
+    cards: [verifierCards[slotIndex]],
     possibleVerifiers: [activeLaws]
   });
 
@@ -98,34 +57,38 @@ export async function verifySingleQuery(
   return testResult.codes.includes(codeStr) ? "solved" : "unsolved";
 }
 
+/**
+ * Vérifie la validité globale des déductions de l'utilisateur.
+ */
 export async function checkDeductions(state: RootState) {
   const numVerifiers = state.comments.length;
   const mode = state.comments[0].nightmare ? 2 : (state.comments[0].criteriaCards.length > 1 ? 1 : 0);
-  const cards = [
-    ...state.comments.map(({ criteriaCards }) => criteriaCards[0].id),
-    ...(mode === 1 ? state.comments.map(({ criteriaCards }) => criteriaCards[1].id) : []),
-  ];
+  const cards = state.comments.map(({ criteriaCards }) => criteriaCards[0].id);
+  if (mode === 1) {
+    state.comments.forEach(({ criteriaCards }) => {
+      if (criteriaCards[1]) cards.push(criteriaCards[1].id);
+    });
+  }
 
   const queries: Query[] = [];
-  for (const round of state.rounds) {
+  state.rounds.forEach((round) => {
     const code: number[] = [];
-    // Correction TS2677: Simple boucle pour éviter les erreurs de type prédicat
     round.code.forEach(c => {
       if (typeof c.digit === 'number') code.push(c.digit);
     });
 
     if (code.length === 3) {
-      for (const query of round.queries) {
-        if (query.state !== "unknown") {
+      round.queries.forEach((q) => {
+        if (q.state !== "unknown") {
           queries.push({
             code,
-            verifierIdx: query.verifier.charCodeAt(0) - "A".charCodeAt(0),
-            result: query.state === "solved",
+            verifierIdx: q.verifier.charCodeAt(0) - "A".charCodeAt(0),
+            result: q.state === "solved",
           });
         }
-      }
+      });
     }
-  }
+  });
 
   const result = await waitForWorker({
     type: "solve_wasm",
@@ -136,12 +99,21 @@ export async function checkDeductions(state: RootState) {
   });
 
   if (result.codes.length === 0) {
-    store.dispatch(alertActions.openAlert({ message: `Invalid deductions!`, level: "error" }));
+    store.dispatch(alertActions.openAlert({ 
+      message: `Invalid deductions! No code matches these results.`, 
+      level: "error" 
+    }));
   } else {
-    store.dispatch(alertActions.openAlert({ message: `Deductions are valid!`, level: "success" }));
+    store.dispatch(alertActions.openAlert({ 
+      message: `Deductions are valid! ${result.codes.length} possible codes remain.`, 
+      level: "success" 
+    }));
   }
 }
 
+/**
+ * Récupère tous les codes possibles selon les critères sélectionnés.
+ */
 export async function getPossibleCodes(comments: CommentsState) {
   const cards = comments.map(({ criteriaCards }) => criteriaCards.map((card) => card.id));
   const possibleVerifiers: number[][] = comments.map(c => {
@@ -159,8 +131,10 @@ export async function getPossibleCodes(comments: CommentsState) {
   return waitForWorker({ type: "get_possible_codes", cards, possibleVerifiers });
 }
 
+// --- Communication Worker ---
+
 let workId = 0;
-const promiseResolves: { [id: number]: any } = {};
+const promiseResolves: { [id: number]: (value: any) => void } = {};
 
 async function waitForWorker(data: any): Promise<any> {
   const id = workId++;
