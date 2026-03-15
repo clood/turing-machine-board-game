@@ -157,8 +157,15 @@ export async function checkDeductions(state: RootState) {
 
 /**
  * Verifies a single query (one verifier for one code) against the WASM solver.
- * Sends the code with result=true and result=false, and checks which one
- * yields possible codes. Returns "solved" if true works, "unsolved" otherwise.
+ *
+ * Strategy : we ask the solver "which codes remain possible if this verifier
+ * gives result=true for this code, given everything already known?".
+ * If the tested code itself appears in those possible codes, then the verifier
+ * indeed passes (result = "solved"). Otherwise it does not (result = "unsolved").
+ *
+ * This is correct because the solver only keeps codes that are consistent with
+ * ALL provided queries AND that lead to a unique solution. So if the code appears
+ * in the result, it means result=true is the consistent answer for this verifier.
  */
 export async function verifySingleQuery(
   state: RootState,
@@ -188,39 +195,10 @@ export async function verifySingleQuery(
 
   const verifierIdx = verifier.charCodeAt(0);
 
-  // Test with result = true (solved)
-  const resultTrue = await waitForWorker({
-    type: "solve_wasm",
-    verifierCards: cards,
-    queries: [{ code, verifierIdx, result: true }],
-    mode,
-    numVerifiers,
-  });
+  // The string representation of the code as used by the solver (e.g. "532")
+  const codeStr = code.map(String).join("");
 
-  // Test with result = false (unsolved)
-  const resultFalse = await waitForWorker({
-    type: "solve_wasm",
-    verifierCards: cards,
-    queries: [{ code, verifierIdx, result: false }],
-    mode,
-    numVerifiers,
-  });
-
-  // If "solved" yields possible codes and "unsolved" does not, it's solved.
-  // If "unsolved" yields possible codes and "solved" does not, it's unsolved.
-  // If both yield codes, we compare: the correct answer is the one that
-  // doesn't eliminate possibilities (both are valid in theory, but the game
-  // guarantees exactly one answer per verifier+code combo).
-  if (resultTrue.codes.length > 0 && resultFalse.codes.length === 0) {
-    return "solved";
-  }
-  if (resultFalse.codes.length > 0 && resultTrue.codes.length === 0) {
-    return "unsolved";
-  }
-
-  // Both have codes — this means the single query alone can't determine
-  // the answer (other queries are needed to narrow down). In this case,
-  // we need to include all existing known queries to get the right context.
+  // Collect all queries already known in the current session
   const existingQueries: Query[] = [];
   for (const round of state.rounds) {
     const roundCode: number[] = [];
@@ -245,8 +223,9 @@ export async function verifySingleQuery(
     }
   }
 
-  // Test with all existing queries + this new one as solved
-  const contextResultTrue = await waitForWorker({
+  // Ask the solver: "if this verifier gives true for this code (+ all known
+  // context), what codes remain possible?"
+  const resultTrue = await waitForWorker({
     type: "solve_wasm",
     verifierCards: cards,
     queries: [...existingQueries, { code, verifierIdx, result: true }],
@@ -254,23 +233,12 @@ export async function verifySingleQuery(
     numVerifiers,
   });
 
-  // Test with all existing queries + this new one as unsolved
-  const contextResultFalse = await waitForWorker({
-    type: "solve_wasm",
-    verifierCards: cards,
-    queries: [...existingQueries, { code, verifierIdx, result: false }],
-    mode,
-    numVerifiers,
-  });
-
-  if (
-    contextResultTrue.codes.length > 0 &&
-    contextResultFalse.codes.length === 0
-  ) {
+  // If the tested code appears in the possible codes with result=true,
+  // then the verifier passes this code → "solved".
+  // Otherwise the verifier does not pass → "unsolved".
+  if (resultTrue.codes.includes(codeStr)) {
     return "solved";
   }
-
-  // Default to unsolved
   return "unsolved";
 }
 
