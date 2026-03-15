@@ -167,4 +167,61 @@ export async function checkDeductions(state: RootState) {
       message: "There are no more possible codes.",
       level: "error",
     }));
+  } else if (!(checkVerifiers(state, result.possibleVerifiers) && checkDigits(state, result.codes) && checkLetters(state, result.possibleLetters))) {
+    store.dispatch(alertActions.openAlert({
+      message: "You have made an invalid deduction!",
+      level: "warning",
+    }));
+  } else {
+    store.dispatch(alertActions.openAlert({
+      message: "All deductions are valid so far!",
+      level: "success",
+    }));
   }
+}
+
+export async function getPossibleCodes(comments: CommentsState) {
+  const cards = comments.map(c => c.criteriaCards.map(card => card.id));
+  const possibleVerifiers: number[][] = [];
+  for (const comment of comments) {
+    const current: number[] = [];
+    let criteriaIdx = 0;
+    for (const criteriaCard of comment.criteriaCards) {
+      for (let i = 0; i < criteriaCard.criteriaSlots; i += 1) {
+        if (!criteriaCard.irrelevantCriteria.includes(i + 1)) {
+          current.push(criteriaIdx);
+        }
+        criteriaIdx += 1;
+      }
+    }
+    possibleVerifiers.push(current);
+  }
+
+  return waitForWorker({
+    type: "get_possible_codes",
+    cards,
+    possibleVerifiers,
+  });
+}
+
+// --- Gestion du Worker ---
+
+let workId = 0;
+const promiseResolves: { [id: number]: (value: any) => void } = {};
+
+async function waitForWorker(data: { [key: string]: any }): Promise<any> {
+  const currentWorkId = workId++;
+  return new Promise((res) => {
+    promiseResolves[currentWorkId] = res;
+    myWorker.postMessage({ ...data, id: currentWorkId });
+  });
+}
+
+myWorker.onmessage = function onmessage(e) {
+  const data = e.data;
+  const resolve = promiseResolves[data.id];
+  if (resolve) {
+    resolve(data);
+    delete promiseResolves[data.id];
+  }
+};
