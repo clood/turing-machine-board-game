@@ -158,14 +158,17 @@ export async function checkDeductions(state: RootState) {
 /**
  * Verifies a single query (one verifier for one code) against the WASM solver.
  *
- * Strategy : we ask the solver "which codes remain possible if this verifier
- * gives result=true for this code, given everything already known?".
- * If the tested code itself appears in those possible codes, then the verifier
- * indeed passes (result = "solved"). Otherwise it does not (result = "unsolved").
+ * Strategy:
+ * 1. Call solve_wasm with NO queries to get the unique solution code of the puzzle.
+ * 2. Call solve_wasm with { enteredCode, verifier, result: true } → resultEntered
+ * 3. Call solve_wasm with { solutionCode, verifier, result: true } → resultSolution
+ * 4. If BOTH return codes.length > 0 → the verifier passes the entered code → "solved"
+ *    Otherwise → "unsolved"
  *
- * This is correct because the solver only keeps codes that are consistent with
- * ALL provided queries AND that lead to a unique solution. So if the code appears
- * in the result, it means result=true is the consistent answer for this verifier.
+ * Rationale: the verifier passes the entered code if and only if it also passes
+ * the solution code in the same way. If result=true is consistent for both codes,
+ * the verifier genuinely passes. If the solution code gives 0 results with result=true,
+ * it means the verifier does NOT pass (the correct answer is false) → unsolved.
  */
 export async function verifySingleQuery(
   state: RootState,
@@ -195,50 +198,53 @@ export async function verifySingleQuery(
 
   const verifierIdx = verifier.charCodeAt(0);
 
-  // The string representation of the code as used by the solver (e.g. "532")
-  const codeStr = code.map(String).join("");
-
-  // Collect all queries already known in the current session
-  const existingQueries: Query[] = [];
-  for (const round of state.rounds) {
-    const roundCode: number[] = [];
-    for (const { digit } of round.code) {
-      if (!(digit !== null && digit >= 1 && digit <= 5)) {
-        continue;
-      }
-      roundCode.push(digit);
-    }
-    if (roundCode.length !== 3) {
-      continue;
-    }
-    for (const query of round.queries) {
-      if (query.state === "unknown") {
-        continue;
-      }
-      existingQueries.push({
-        code: roundCode,
-        verifierIdx: query.verifier.charCodeAt(0),
-        result: query.state === "solved",
-      });
-    }
-  }
-
-  // Ask the solver: "if this verifier gives true for this code (+ all known
-  // context), what codes remain possible?"
-  const resultTrue = await waitForWorker({
+  // Step 1 : get the unique solution code via solve_wasm with no queries
+  const solutionResult = await waitForWorker({
     type: "solve_wasm",
     verifierCards: cards,
-    queries: [...existingQueries, { code, verifierIdx, result: true }],
+    queries: [],
     mode,
     numVerifiers,
   });
 
-  // If the tested code appears in the possible codes with result=true,
-  // then the verifier passes this code → "solved".
-  // Otherwise the verifier does not pass → "unsolved".
-  if (resultTrue.codes.includes(codeStr)) {
+  if (solutionResult.codes.length !== 1) {
+    // Puzzle has no unique solution — cannot determine result
+    return "unsolved";
+  }
+
+  const solutionStr: string = solutionResult.codes[0]; // e.g. "532"
+  const solutionCode: number[] = [
+    Number(solutionStr[0]),
+    Number(solutionStr[1]),
+    Number(solutionStr[2]),
+  ];
+
+  // Step 2 : test the entered code with result=true for this verifier
+  const resultForEnteredCode = await waitForWorker({
+    type: "solve_wasm",
+    verifierCards: cards,
+    queries: [{ code, verifierIdx, result: true }],
+    mode,
+    numVerifiers,
+  });
+
+  // Step 3 : test the solution code with result=true for this verifier
+  const resultForSolutionCode = await waitForWorker({
+    type: "solve_wasm",
+    verifierCards: cards,
+    queries: [{ code: solutionCode, verifierIdx, result: true }],
+    mode,
+    numVerifiers,
+  });
+
+  // Step 4 : if both are consistent with result=true → "solved", else → "unsolved"
+  if (
+    resultForEnteredCode.codes.length > 0 &&
+    resultForSolutionCode.codes.length > 0
+  ) {
     return "solved";
   }
+
   return "unsolved";
 }
 
@@ -278,7 +284,6 @@ async function waitForWorker(data: { [key: string]: any }): Promise<any> {
     myWorker.postMessage({ ...data, id: currentWorkId });
   });
 }
-
 
 myWorker.onmessage = function onmessage(e) {
   const data = e.data;
