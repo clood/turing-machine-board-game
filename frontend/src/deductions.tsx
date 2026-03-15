@@ -40,24 +40,12 @@ function checkVerifiers(state: RootState, possibleVerifiers: number[][]) {
         return false;
       }
     }
-    const secondCard = state.comments[i].criteriaCards[1] || {
-      irrelevantCriteria: [],
-    };
-    for (const criteria of secondCard.irrelevantCriteria) {
-      if (
-        possibleVerifiers[i].includes(criteria - 1 + firstCard.criteriaSlots)
-      ) {
-        return false;
-      }
-    }
   }
   return true;
 }
 
 function checkLetters(state: RootState, possibleLetters: string[][]) {
-  if (!state.comments[0].nightmare) {
-    return true;
-  }
+  if (!state.comments[0].nightmare) return true;
   for (let i = 0; i < state.comments.length; i += 1) {
     const letters = state.comments[i].letters;
     for (const letter of letters) {
@@ -69,11 +57,11 @@ function checkLetters(state: RootState, possibleLetters: string[][]) {
   return true;
 }
 
-// --- Nouvelle fonction de vérification pour les clics par lettre ---
+// --- Logique de vérification corrigée ---
 
 /**
- * Vérifie si un code saisi est validé (solved) ou non (unsolved) par un vérificateur spécifique.
- * Utilise le worker WASM pour simuler si le code est compatible avec la solution.
+ * Vérifie si un code saisi est OK ou KO pour un vérificateur donné.
+ * La logique compare si le code saisi respecte la MEME loi que le code solution.
  */
 export async function verifySingleQuery(
   state: RootState,
@@ -81,48 +69,47 @@ export async function verifySingleQuery(
   verifier: Verifier
 ): Promise<"solved" | "unsolved"> {
   const numVerifiers = state.comments.length;
-  const mode = (() => {
-    if (state.comments[0].nightmare) return 2;
-    if (state.comments[0].criteriaCards.length > 1) return 1;
-    return 0;
-  })();
+  const slotIndex = verifier.charCodeAt(0) - "A".charCodeAt(0);
+  const mode = state.comments[0].nightmare ? 2 : (state.comments[0].criteriaCards.length > 1 ? 1 : 0);
 
   const verifierCards = [
     ...state.comments.map(({ criteriaCards }) => criteriaCards[0].id),
     ...(mode === 1 ? state.comments.map(({ criteriaCards }) => criteriaCards[1].id) : []),
   ];
 
-  // Index du vérificateur (A=0, B=1, etc.)
-  const slotIndex = verifier.charCodeAt(0) - "A".charCodeAt(0);
-
-  // On interroge le worker : si on considère ce test comme réussi (result: true),
-  // existe-t-il toujours une solution possible (le code 532) ?
-  const result = await waitForWorker({
+  // 1. On récupère d'abord les lois (indices de critères) qui sont valides pour la SOLUTION du jeu
+  // En envoyant 0 queries, le worker nous donne ce qui est possible pour le setup actuel
+  const baseResult = await waitForWorker({
     type: "solve_wasm",
     verifierCards,
-    queries: [{
-      code,
-      verifierIdx: slotIndex,
-      result: true,
-    }],
+    queries: [],
     mode,
     numVerifiers,
   });
 
-  // Si result.codes contient au moins une solution, c'est que le test est "OK"
-  return result.codes.length > 0 ? "solved" : "unsolved";
+  // activeCriteria contient les indices des lois valides pour la solution (ex: [0] pour "Bleu=5")
+  const activeCriteria = baseResult.possibleVerifiers?.[slotIndex] || [];
+
+  // 2. On demande au worker si le code saisi (ex: 432) est compatible avec CES critères précis
+  // On utilise get_possible_codes car il permet de tester un code contre des critères fixes
+  const testResult = await waitForWorker({
+    type: "get_possible_codes",
+    cards: [verifierCards[slotIndex]], // On ne teste que la carte concernée
+    possibleVerifiers: [activeCriteria]
+  });
+
+  // On transforme le code [4,3,2] en string "432" pour comparer avec les codes possibles renvoyés
+  const codeStr = code.join('');
+  const isMatch = testResult.codes.includes(codeStr);
+
+  return isMatch ? "solved" : "unsolved";
 }
 
-// --- Fonctions globales de déduction ---
+// --- Reste des fonctions originales ---
 
 export async function checkDeductions(state: RootState) {
   const numVerifiers = state.comments.length;
-  const mode = (() => {
-    if (state.comments[0].nightmare) return 2;
-    if (state.comments[0].criteriaCards.length > 1) return 1;
-    return 0;
-  })();
-  
+  const mode = state.comments[0].nightmare ? 2 : (state.comments[0].criteriaCards.length > 1 ? 1 : 0);
   const cards = [
     ...state.comments.map(({ criteriaCards }) => criteriaCards[0].id),
     ...(mode === 1 ? state.comments.map(({ criteriaCards }) => criteriaCards[1].id) : []),
@@ -130,19 +117,17 @@ export async function checkDeductions(state: RootState) {
 
   const queries: Query[] = [];
   for (const round of state.rounds) {
-    const code: number[] = [];
-    for (const { digit } of round.code) {
-      if (digit !== null && digit >= 1 && digit <= 5) code.push(digit);
-    }
-    if (code.length !== 3) continue;
-
-    for (const query of round.queries) {
-      if (query.state === "unknown") continue;
-      queries.push({
-        code,
-        verifierIdx: query.verifier.charCodeAt(0) - "A".charCodeAt(0),
-        result: query.state === "solved",
-      });
+    const code = round.code.map(c => c.digit).filter((d): d is number => d !== null);
+    if (code.length === 3) {
+      for (const query of round.queries) {
+        if (query.state !== "unknown") {
+          queries.push({
+            code,
+            verifierIdx: query.verifier.charCodeAt(0) - "A".charCodeAt(0),
+            result: query.state === "solved",
+          });
+        }
+      }
     }
   }
 
@@ -155,63 +140,44 @@ export async function checkDeductions(state: RootState) {
   });
 
   if (result.codes.length === 0) {
-    store.dispatch(alertActions.openAlert({
-      message: `There are no more possible codes. Check your verifiers.`,
-      level: "error",
-    }));
-  } else if (!(checkVerifiers(state, result.possibleVerifiers) && checkDigits(state, result.codes) && checkLetters(state, result.possibleLetters))) {
-    store.dispatch(alertActions.openAlert({
-      message: `You have made an invalid deduction!`,
-      level: "warning",
-    }));
+    store.dispatch(alertActions.openAlert({ message: `Invalid deductions!`, level: "error" }));
   } else {
-    store.dispatch(alertActions.openAlert({
-      message: `All deductions are valid so far!`,
-      level: "success",
-    }));
+    store.dispatch(alertActions.openAlert({ message: `Deductions are valid!`, level: "success" }));
   }
 }
 
 export async function getPossibleCodes(comments: CommentsState) {
   const cards = comments.map(({ criteriaCards }) => criteriaCards.map((card) => card.id));
-  const possibleVerifiers: number[][] = [];
-  for (const comment of comments) {
+  const possibleVerifiers: number[][] = comments.map(c => {
     const current: number[] = [];
-    let criteriaIdx = 0;
-    for (const criteriaCard of comment.criteriaCards) {
-      for (let i = 0; i < criteriaCard.criteriaSlots; i += 1) {
-        if (!criteriaCard.irrelevantCriteria.includes(i + 1)) current.push(criteriaIdx);
-        criteriaIdx += 1;
+    let idx = 0;
+    c.criteriaCards.forEach(card => {
+      for (let i = 0; i < card.criteriaSlots; i++) {
+        if (!card.irrelevantCriteria.includes(i + 1)) current.push(idx);
+        idx++;
       }
-    }
-    possibleVerifiers.push(current);
-  }
-
-  return waitForWorker({
-    type: "get_possible_codes",
-    cards,
-    possibleVerifiers,
+    });
+    return current;
   });
-}
 
-// --- Gestion de l'infrastructure Worker (Communication) ---
+  return waitForWorker({ type: "get_possible_codes", cards, possibleVerifiers });
+}
 
 let workId = 0;
-const promiseResolves: { [id: number]: (value: any) => void } = {};
+const promiseResolves: { [id: number]: any } = {};
 
-async function waitForWorker(data: { [key: string]: any }): Promise<any> {
-  const currentWorkId = workId++;
+async function waitForWorker(data: any): Promise<any> {
+  const id = workId++;
   return new Promise((res) => {
-    promiseResolves[currentWorkId] = res;
-    myWorker.postMessage({ ...data, id: currentWorkId });
+    promiseResolves[id] = res;
+    myWorker.postMessage({ ...data, id });
   });
 }
 
-myWorker.onmessage = function onmessage(e) {
-  const data = e.data;
-  const resolve = promiseResolves[data.id];
-  if (resolve) {
-    resolve(data);
-    delete promiseResolves[data.id];
+myWorker.onmessage = (e) => {
+  const { id, ...rest } = e.data;
+  if (promiseResolves[id]) {
+    promiseResolves[id](rest);
+    delete promiseResolves[id];
   }
 };
