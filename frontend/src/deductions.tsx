@@ -14,9 +14,66 @@ const myWorker = new Worker(
   "/turing-machine-board-game-solver/wasm/worker.mjs"
 );
 
+// --- Fonctions internes utilisées par checkDeductions ---
+
+function checkDigits(state: RootState, possibleCodes: string[]) {
+  const digits = { triangle: new Set(), square: new Set(), circle: new Set() };
+  for (const code of possibleCodes) {
+    digits.triangle.add(Number(code[0]));
+    digits.square.add(Number(code[1]));
+    digits.circle.add(Number(code[2]));
+  }
+  for (const { shape, digit } of state.digitCode) {
+    // @ts-ignore
+    if (digits[shape as keyof typeof digits].has(digit)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function checkVerifiers(state: RootState, possibleVerifiers: number[][]) {
+  for (let i = 0; i < state.comments.length; i += 1) {
+    const firstCard = state.comments[i].criteriaCards[0];
+    for (const criteria of firstCard.irrelevantCriteria) {
+      if (possibleVerifiers[i].includes(criteria - 1)) {
+        return false;
+      }
+    }
+    const secondCard = state.comments[i].criteriaCards[1] || {
+      irrelevantCriteria: [],
+    };
+    for (const criteria of secondCard.irrelevantCriteria) {
+      if (
+        possibleVerifiers[i].includes(criteria - 1 + firstCard.criteriaSlots)
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function checkLetters(state: RootState, possibleLetters: string[][]) {
+  if (!state.comments[0] || !state.comments[0].nightmare) {
+    return true;
+  }
+  for (let i = 0; i < state.comments.length; i += 1) {
+    const letters = state.comments[i].letters;
+    for (const letter of letters) {
+      if (letter.isIrrelevant && possibleLetters[i].includes(letter.letter)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+// --- Nouvelle fonction pour vos tests OK/KO par lettre ---
+
 /**
- * LOGIQUE DE VÉRIFICATION POUR LES TESTS PAR LETTRE (OK/KO)
- * Compare le code saisi à la loi unique de la solution actuelle.
+ * Cette fonction est appelée quand on clique sur une lettre (A, B, C...)
+ * Elle valide si le code saisi respecte la loi de la solution.
  */
 export async function verifySingleQuery(
   state: RootState,
@@ -24,17 +81,19 @@ export async function verifySingleQuery(
   verifier: Verifier
 ): Promise<"solved" | "unsolved"> {
   const numVerifiers = state.comments.length;
+  if (numVerifiers === 0) return "unsolved";
+
   const slotIndex = verifier.charCodeAt(0) - "A".charCodeAt(0);
   const mode = state.comments[0].nightmare ? 2 : (state.comments[0].criteriaCards.length > 1 ? 1 : 0);
 
-  const verifierCards = state.comments.map(({ criteriaCards }) => criteriaCards[0].id);
+  const verifierCards = state.comments.map(c => c.criteriaCards[0].id);
   if (mode === 1) {
-    state.comments.forEach(({ criteriaCards }) => {
-      if (criteriaCards[1]) verifierCards.push(criteriaCards[1].id);
+    state.comments.forEach(c => {
+      if (c.criteriaCards[1]) verifierCards.push(c.criteriaCards[1].id);
     });
   }
 
-  // 1. Identification de la loi active (basée sur la solution unique du setup)
+  // On demande au worker de trouver la solution unique du setup
   const solverResult = await waitForWorker({
     type: "solve_wasm",
     verifierCards,
@@ -43,42 +102,47 @@ export async function verifySingleQuery(
     numVerifiers,
   });
 
-  const activeLaws = solverResult.possibleVerifiers?.[slotIndex] || [];
-  if (activeLaws.length === 0) return "unsolved";
-
-  // 2. Test du code contre cette loi précise
-  const testResult = await waitForWorker({
-    type: "get_possible_codes",
-    cards: [verifierCards[slotIndex]],
-    possibleVerifiers: [activeLaws]
+  // On teste si VOTRE code respecte l'indice de loi de la solution
+  const result = await waitForWorker({
+    type: "solve_wasm",
+    verifierCards,
+    queries: [{
+      code: code,
+      verifierIdx: slotIndex,
+      result: true
+    }],
+    mode,
+    numVerifiers,
   });
 
-  const codeStr = code.join('');
-  return testResult.codes.includes(codeStr) ? "solved" : "unsolved";
+  // Si après avoir forcé "votre code est vrai", il reste des solutions possibles 
+  // (incluant le code 532), alors c'est OK (solved). Sinon KO (unsolved).
+  return result.codes.length > 0 ? "solved" : "unsolved";
 }
 
-/**
- * Vérifie la validité globale des déductions de l'utilisateur.
- */
+// --- Fonctions d'origine exportées ---
+
 export async function checkDeductions(state: RootState) {
+  if (state.comments.length === 0) return;
+
   const numVerifiers = state.comments.length;
   const mode = state.comments[0].nightmare ? 2 : (state.comments[0].criteriaCards.length > 1 ? 1 : 0);
-  const cards = state.comments.map(({ criteriaCards }) => criteriaCards[0].id);
+  
+  const cards = state.comments.map(c => c.criteriaCards[0].id);
   if (mode === 1) {
-    state.comments.forEach(({ criteriaCards }) => {
-      if (criteriaCards[1]) cards.push(criteriaCards[1].id);
+    state.comments.forEach(c => {
+      if (c.criteriaCards[1]) cards.push(c.criteriaCards[1].id);
     });
   }
 
   const queries: Query[] = [];
-  state.rounds.forEach((round) => {
+  state.rounds.forEach(round => {
     const code: number[] = [];
     round.code.forEach(c => {
       if (typeof c.digit === 'number') code.push(c.digit);
     });
-
     if (code.length === 3) {
-      round.queries.forEach((q) => {
+      round.queries.forEach(q => {
         if (q.state !== "unknown") {
           queries.push({
             code,
@@ -99,55 +163,8 @@ export async function checkDeductions(state: RootState) {
   });
 
   if (result.codes.length === 0) {
-    store.dispatch(alertActions.openAlert({ 
-      message: `Invalid deductions! No code matches these results.`, 
-      level: "error" 
-    }));
-  } else {
-    store.dispatch(alertActions.openAlert({ 
-      message: `Deductions are valid! ${result.codes.length} possible codes remain.`, 
-      level: "success" 
+    store.dispatch(alertActions.openAlert({
+      message: "There are no more possible codes.",
+      level: "error",
     }));
   }
-}
-
-/**
- * Récupère tous les codes possibles selon les critères sélectionnés.
- */
-export async function getPossibleCodes(comments: CommentsState) {
-  const cards = comments.map(({ criteriaCards }) => criteriaCards.map((card) => card.id));
-  const possibleVerifiers: number[][] = comments.map(c => {
-    const current: number[] = [];
-    let idx = 0;
-    c.criteriaCards.forEach(card => {
-      for (let i = 0; i < card.criteriaSlots; i++) {
-        if (!card.irrelevantCriteria.includes(i + 1)) current.push(idx);
-        idx++;
-      }
-    });
-    return current;
-  });
-
-  return waitForWorker({ type: "get_possible_codes", cards, possibleVerifiers });
-}
-
-// --- Communication Worker ---
-
-let workId = 0;
-const promiseResolves: { [id: number]: (value: any) => void } = {};
-
-async function waitForWorker(data: any): Promise<any> {
-  const id = workId++;
-  return new Promise((res) => {
-    promiseResolves[id] = res;
-    myWorker.postMessage({ ...data, id });
-  });
-}
-
-myWorker.onmessage = (e) => {
-  const { id, ...rest } = e.data;
-  if (promiseResolves[id]) {
-    promiseResolves[id](rest);
-    delete promiseResolves[id];
-  }
-};
