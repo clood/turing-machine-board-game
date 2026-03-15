@@ -8,6 +8,9 @@ export type Query = {
   result: boolean;
 };
 
+// Type pour les lettres de vérificateurs (A, B, C...)
+export type Verifier = string;
+
 const myWorker = new Worker(
   "/turing-machine-board-game-solver/wasm/worker.mjs"
 );
@@ -20,7 +23,7 @@ function checkDigits(state: RootState, possibleCodes: string[]) {
     digits.circle.add(Number(code[2]));
   }
   for (const { shape, digit } of state.digitCode) {
-    if (digits[shape].has(digit)) {
+    if (digits[shape as keyof typeof digits].has(digit)) {
       return false;
     }
   }
@@ -31,12 +34,10 @@ function checkVerifiers(state: RootState, possibleVerifiers: number[][]) {
   for (let i = 0; i < state.comments.length; i += 1) {
     const firstCard = state.comments[i].criteriaCards[0];
     for (const criteria of firstCard.irrelevantCriteria) {
-      // the verifiers are 1-indexed in the frontend
       if (possibleVerifiers[i].includes(criteria - 1)) {
         return false;
       }
     }
-    // extreme mode
     const secondCard = state.comments[i].criteriaCards[1] || {
       irrelevantCriteria: [],
     };
@@ -106,7 +107,7 @@ export async function checkDeductions(state: RootState) {
       }
       queries.push({
         code,
-        verifierIdx: query.verifier.charCodeAt(0),
+        verifierIdx: query.verifier.charCodeAt(0) - "A".charCodeAt(0),
         result: query.state === "solved",
       });
     }
@@ -120,14 +121,10 @@ export async function checkDeductions(state: RootState) {
     numVerifiers,
   });
 
-  console.log(result);
-  console.log(state);
   if (result.codes.length === 0) {
     store.dispatch(
       alertActions.openAlert({
-        message: `There are no more possible codes.
-          Please double-check that you have the correct verifiers and that your query results are correct.
-          If this problem still occurs, please file a bug report.`,
+        message: `There are no more possible codes.`,
         level: "error",
       })
     );
@@ -154,16 +151,145 @@ export async function checkDeductions(state: RootState) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Verifier functions — mirrors of cards.hpp verifier_t lambdas
+// code = [blue/triangle, yellow/square, purple/circle]  (1-indexed digits)
+// ---------------------------------------------------------------------------
+
+type VerifierFn = (code: number[]) => boolean;
+
+const CARD_VERIFIERS: Record<number, VerifierFn[]> = {
+  1:  [c => c[0] === 1,  c => c[0] > 1],
+  2:  [c => c[0] < 3,    c => c[0] === 3,  c => c[0] > 3],
+  3:  [c => c[1] < 3,    c => c[1] === 3,  c => c[1] > 3],
+  4:  [c => c[1] < 4,    c => c[1] === 4,  c => c[1] > 4],
+  5:  [c => c[0] % 2 === 0, c => c[0] % 2 !== 0],
+  6:  [c => c[1] % 2 === 0, c => c[1] % 2 !== 0],
+  7:  [c => c[2] % 2 === 0, c => c[2] % 2 !== 0],
+  8:  [c => c[0] < 3,    c => c[0] === 3,  c => c[0] > 3,  c => c[1] < 3],
+  9:  [c => c[1] < 3,    c => c[1] === 3,  c => c[1] > 3,  c => c[2] < 3],
+  10: [c => c[0] < 4,    c => c[0] === 4,  c => c[0] > 4,  c => c[1] < 4],
+  11: [c => c[0] < 3,    c => c[0] === 3,  c => c[0] > 3],
+  12: [c => c[1] < 3,    c => c[1] === 3,  c => c[1] > 3],
+  13: [c => c[2] < 3,    c => c[2] === 3,  c => c[2] > 3],
+  14: [c => c[0] < 4,    c => c[0] === 4,  c => c[0] > 4],
+  15: [c => c[1] < 4,    c => c[1] === 4,  c => c[1] > 4],
+  16: [c => c[2] < 4,    c => c[2] === 4,  c => c[2] > 4],
+  17: [c => c[0] % 2 === 0, c => c[0] % 2 !== 0, c => c[1] % 2 === 0, c => c[1] % 2 !== 0],
+  18: [c => (c[0] + c[1] + c[2]) % 2 === 0, c => (c[0] + c[1] + c[2]) % 2 !== 0],
+  19: [c => c[0] + c[1] < 6, c => c[0] + c[1] === 6, c => c[0] + c[1] > 6],
+  20: [
+    c => c[0] === c[1] && c[1] === c[2],
+    c => ((c[0]===c[1])||(c[0]===c[2])||(c[1]===c[2])) && !(c[0]===c[1]&&c[1]===c[2]),
+    c => c[0]!==c[1] && c[0]!==c[2] && c[1]!==c[2],
+  ],
+  21: [
+    c => c[0]!==c[1] && c[0]!==c[2] && c[1]!==c[2],
+    c => ((c[0]===c[1])||(c[0]===c[2])||(c[1]===c[2])) && !(c[0]===c[1]&&c[1]===c[2]),
+  ],
+  22: [
+    c => c[0]<c[1] && c[1]<c[2],
+    c => c[0]>c[1] && c[1]>c[2],
+    c => !(c[0]<c[1]&&c[1]<c[2]) && !(c[0]>c[1]&&c[1]>c[2]),
+  ],
+  23: [c => c[0]+c[1]+c[2] < 6, c => c[0]+c[1]+c[2] === 6, c => c[0]+c[1]+c[2] > 6],
+  24: [
+    c => c[1]===c[0]+1 && c[2]===c[1]+1,
+    c => c[1]===c[0]-1 && c[2]===c[1]-1,
+    c => !(c[1]===c[0]+1&&c[2]===c[1]+1) && !(c[1]===c[0]-1&&c[2]===c[1]-1),
+  ],
+  25: [
+    c => c[0]<=c[1] && c[0]<=c[2],
+    c => c[1]<=c[0] && c[1]<=c[2],
+    c => c[2]<=c[0] && c[2]<=c[1],
+  ],
+  26: [c => c[0]<3, c => c[1]<3, c => c[2]<3],
+  27: [c => c[0]<4, c => c[1]<4, c => c[2]<4],
+  28: [c => c[0]===1, c => c[1]===1, c => c[2]===1],
+  29: [c => c[0]===3, c => c[1]===3, c => c[2]===3],
+  30: [c => c[0]===4, c => c[1]===4, c => c[2]===4],
+  31: [c => c[0]>1, c => c[1]>1, c => c[2]>1],
+  32: [c => c[0]>3, c => c[1]>3, c => c[2]>3],
+  33: [
+    c => c[0]%2===0, c => c[0]%2!==0,
+    c => c[1]%2===0, c => c[1]%2!==0,
+    c => c[2]%2===0, c => c[2]%2!==0,
+  ],
+  34: [
+    c => c[0]<=c[1] && c[0]<=c[2],
+    c => c[1]<=c[0] && c[1]<=c[2],
+    c => c[2]<=c[0] && c[2]<=c[1],
+  ],
+  35: [
+    c => c[0]>=c[1] && c[0]>=c[2],
+    c => c[1]>=c[0] && c[1]>=c[2],
+    c => c[2]>=c[0] && c[2]>=c[1],
+  ],
+  36: [c => c[0]+c[1]===4, c => c[0]+c[2]===4, c => c[1]+c[2]===4],
+  37: [c => c[0]+c[1]===4, c => c[0]+c[2]===4, c => c[1]+c[2]===4],
+  38: [c => c[0]+c[1]===6, c => c[0]+c[2]===6, c => c[1]+c[2]===6],
+  39: [c => c[0]===1, c => c[0]>1, c => c[1]===1, c => c[1]>1, c => c[2]===1, c => c[2]>1],
+  40: [
+    c => c[0]<3,  c => c[0]===3, c => c[0]>3,
+    c => c[1]<3,  c => c[1]===3, c => c[1]>3,
+    c => c[2]<3,  c => c[2]===3, c => c[2]>3,
+  ],
+  41: [
+    c => c[0]<4,  c => c[0]===4, c => c[0]>4,
+    c => c[1]<4,  c => c[1]===4, c => c[1]>4,
+    c => c[2]<4,  c => c[2]===4, c => c[2]>4,
+  ],
+  42: [
+    c => c[0]<c[1] && c[0]<c[2],
+    c => c[0]>c[1] && c[0]>c[2],
+    c => c[1]<c[0] && c[1]<c[2],
+    c => c[1]>c[0] && c[1]>c[2],
+    c => c[2]<c[0] && c[2]<c[1],
+    c => c[2]>c[0] && c[2]>c[1],
+  ],
+  43: [
+    c => c[0]<c[1],  c => c[0]<c[2],
+    c => c[0]===c[1], c => c[0]===c[2],
+    c => c[0]>c[1],  c => c[0]>c[2],
+  ],
+  44: [
+    c => c[0]>c[1],  c => c[1]<c[2],
+    c => c[0]===c[1], c => c[1]===c[2],
+    c => c[0]<c[1],  c => c[1]>c[2],
+  ],
+  45: [
+    c => c.filter(v=>v===1).length === 0,
+    c => c.filter(v=>v===3).length === 0,
+    c => c.filter(v=>v===1).length === 1,
+    c => c.filter(v=>v===3).length === 1,
+    c => c.filter(v=>v===1).length === 2,
+    c => c.filter(v=>v===3).length === 2,
+  ],
+  46: [
+    c => c.filter(v=>v===3).length === 0,
+    c => c.filter(v=>v===4).length === 0,
+    c => c.filter(v=>v===3).length === 1,
+    c => c.filter(v=>v===4).length === 1,
+    c => c.filter(v=>v===3).length === 2,
+    c => c.filter(v=>v===4).length === 2,
+  ],
+  47: [
+    c => c.filter(v=>v===1).length === 0,
+    c => c.filter(v=>v===4).length === 0,
+    c => c.filter(v=>v===1).length === 1,
+    c => c.filter(v=>v===4).length === 1,
+    c => c.filter(v=>v===1).length === 2,
+    c => c.filter(v=>v===4).length === 2,
+  ],
+  48: [
+    c => c[0]<c[1],  c => c[0]===c[1], c => c[0]>c[1],
+    c => c[0]<c[2],  c => c[0]===c[2], c => c[0]>c[2],
+    c => c[1]<c[2],  c => c[1]===c[2], c => c[1]>c[2],
+  ],
+};
+
 /**
- * Verifies a single query (one verifier for one code) against the WASM solver.
- *
- * Strategy:
- * 1. Call solve_wasm with NO queries to get the unique solution code of the puzzle.
- * 2. Call solve_wasm with { solutionCode, verifier, result: true } → must return codes > 0
- * 3. Call solve_wasm with { enteredCode, verifier, result: true } → if codes > 0 → "solved"
- *
- * NOTE: verifierIdx in query_t is the ASCII char of the machine letter
- * ('A'=65, 'B'=66...), NOT a 0-based index within the card's verifier list.
+ * Logique de vérification générique pour les clics sur les lettres.
  */
 export async function verifySingleQuery(
   state: RootState,
@@ -171,84 +297,42 @@ export async function verifySingleQuery(
   verifier: Verifier
 ): Promise<"solved" | "unsolved"> {
   const numVerifiers = state.comments.length;
-  const mode = (() => {
-    if (state.comments[0].nightmare) {
-      return 2;
-    }
-    if (state.comments[0].criteriaCards.length > 1) {
-      return 1;
-    }
-    return 0;
-  })();
-  const cards = [
-    ...state.comments.map(({ criteriaCards }) => {
-      return criteriaCards[0].id;
-    }),
-    ...(mode === 1
-      ? state.comments.map(({ criteriaCards }) => {
-          return criteriaCards[1].id;
-        })
-      : []),
+  const mode = state.comments[0].nightmare ? 2 : (state.comments[0].criteriaCards.length > 1 ? 1 : 0);
+
+  const verifierCards = [
+    ...state.comments.map(({ criteriaCards }) => criteriaCards[0].id),
+    ...(mode === 1 ? state.comments.map(({ criteriaCards }) => criteriaCards[1].id) : []),
   ];
 
-  // verifierIdx as ASCII char: 'A'=65, 'B'=66, etc. — this is what the solver expects
-  const verifierIdx = verifier.charCodeAt(0);
+  const slotIndex = verifier.charCodeAt(0) - "A".charCodeAt(0);
+  const cardId = state.comments[slotIndex]?.criteriaCards[0]?.id;
 
-  // Step 1: solve with no queries to get the unique solution code
+  if (!cardId || !CARD_VERIFIERS[cardId]) return "unsolved";
+
+  // Récupère les sous-indices de lois valides pour la solution du jeu
   const solutionResult = await waitForWorker({
     type: "solve_wasm",
-    verifierCards: cards,
-    queries: [],
+    verifierCards,
+    queries: [], // On ne passe pas de requêtes pour trouver la "vraie" loi
     mode,
     numVerifiers,
   });
 
-  if (solutionResult.codes.length !== 1) {
-    return "unsolved";
-  }
+  const activeSubIndices: number[] = solutionResult.possibleVerifiers?.[slotIndex] ?? [];
 
-  const solutionStr: string = solutionResult.codes[0]; // e.g. "532"
-  const solutionCode: number[] = [
-    Number(solutionStr[0]),
-    Number(solutionStr[1]),
-    Number(solutionStr[2]),
-  ];
-
-  // Step 2: test the solution code with result=true — must return codes > 0
-  const resultForSolutionCode = await waitForWorker({
-    type: "solve_wasm",
-    verifierCards: cards,
-    queries: [{ code: solutionCode, verifierIdx, result: true }],
-    mode,
-    numVerifiers,
-  });
-
-  if (resultForSolutionCode.codes.length === 0) {
-    // Should never happen for a valid puzzle
-    return "unsolved";
-  }
-
-  // Step 3: test the entered code with result=true for this verifier
-  const resultForEnteredCode = await waitForWorker({
-    type: "solve_wasm",
-    verifierCards: cards,
-    queries: [{ code, verifierIdx, result: true }],
-    mode,
-    numVerifiers,
-  });
-
-  // If consistent with result=true → "solved", otherwise → "unsolved"
-  if (resultForEnteredCode.codes.length > 0) {
-    return "solved";
+  // On teste si le code saisi satisfait LA loi active pour ce vérificateur
+  const cardVerifiers = CARD_VERIFIERS[cardId];
+  for (const subIdx of activeSubIndices) {
+    if (cardVerifiers[subIdx] && cardVerifiers[subIdx](code)) {
+      return "solved";
+    }
   }
 
   return "unsolved";
 }
 
 export async function getPossibleCodes(comments: CommentsState) {
-  const cards = comments.map(({ criteriaCards }) => {
-    return criteriaCards.map((card) => card.id);
-  });
+  const cards = comments.map(({ criteriaCards }) => criteriaCards.map((card) => card.id));
   const possibleVerifiers: number[][] = [];
   for (const comment of comments) {
     const current: number[] = [];
@@ -263,7 +347,6 @@ export async function getPossibleCodes(comments: CommentsState) {
     }
     possibleVerifiers.push(current);
   }
-  console.log(cards, possibleVerifiers);
 
   return waitForWorker({
     type: "get_possible_codes",
@@ -285,6 +368,8 @@ async function waitForWorker(data: { [key: string]: any }): Promise<any> {
 myWorker.onmessage = function onmessage(e) {
   const data = e.data;
   const resolve = promiseResolves[data.id];
-  resolve(data);
-  delete promiseResolves[data.id];
+  if (resolve) {
+    resolve(data);
+    delete promiseResolves[data.id];
+  }
 };
