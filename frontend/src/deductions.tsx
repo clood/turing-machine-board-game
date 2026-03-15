@@ -14,8 +14,6 @@ const myWorker = new Worker(
   "/turing-machine-board-game-solver/wasm/worker.mjs"
 );
 
-// --- Fonctions de validation existantes (conservées) ---
-
 function checkDigits(state: RootState, possibleCodes: string[]) {
   const digits = { triangle: new Set(), square: new Set(), circle: new Set() };
   for (const code of possibleCodes) {
@@ -57,11 +55,8 @@ function checkLetters(state: RootState, possibleLetters: string[][]) {
   return true;
 }
 
-// --- Logique de vérification corrigée ---
-
 /**
- * Vérifie si un code saisi est OK ou KO pour un vérificateur donné.
- * La logique compare si le code saisi respecte la MEME loi que le code solution.
+ * LOGIQUE DE VÉRIFICATION POUR LES TESTS OK/KO
  */
 export async function verifySingleQuery(
   state: RootState,
@@ -77,9 +72,8 @@ export async function verifySingleQuery(
     ...(mode === 1 ? state.comments.map(({ criteriaCards }) => criteriaCards[1].id) : []),
   ];
 
-  // 1. On récupère d'abord les lois (indices de critères) qui sont valides pour la SOLUTION du jeu
-  // En envoyant 0 queries, le worker nous donne ce qui est possible pour le setup actuel
-  const baseResult = await waitForWorker({
+  // 1. On trouve d'abord quelle est l'UNIQUE loi valide pour le setup actuel (la solution 532)
+  const solverResult = await waitForWorker({
     type: "solve_wasm",
     verifierCards,
     queries: [],
@@ -87,25 +81,22 @@ export async function verifySingleQuery(
     numVerifiers,
   });
 
-  // activeCriteria contient les indices des lois valides pour la solution (ex: [0] pour "Bleu=5")
-  const activeCriteria = baseResult.possibleVerifiers?.[slotIndex] || [];
+  // possibleVerifiers[slotIndex] contient l'index de la loi active (ex: [0])
+  const activeLaws = solverResult.possibleVerifiers?.[slotIndex] || [];
 
-  // 2. On demande au worker si le code saisi (ex: 432) est compatible avec CES critères précis
-  // On utilise get_possible_codes car il permet de tester un code contre des critères fixes
+  if (activeLaws.length === 0) return "unsolved";
+
+  // 2. On teste si le code saisi respecte cette loi précise
+  // On utilise get_possible_codes sur la carte du vérificateur avec seulement la loi active
   const testResult = await waitForWorker({
     type: "get_possible_codes",
-    cards: [verifierCards[slotIndex]], // On ne teste que la carte concernée
-    possibleVerifiers: [activeCriteria]
+    cards: [[verifierCards[slotIndex]]],
+    possibleVerifiers: [activeLaws]
   });
 
-  // On transforme le code [4,3,2] en string "432" pour comparer avec les codes possibles renvoyés
   const codeStr = code.join('');
-  const isMatch = testResult.codes.includes(codeStr);
-
-  return isMatch ? "solved" : "unsolved";
+  return testResult.codes.includes(codeStr) ? "solved" : "unsolved";
 }
-
-// --- Reste des fonctions originales ---
 
 export async function checkDeductions(state: RootState) {
   const numVerifiers = state.comments.length;
@@ -117,7 +108,12 @@ export async function checkDeductions(state: RootState) {
 
   const queries: Query[] = [];
   for (const round of state.rounds) {
-    const code = round.code.map(c => c.digit).filter((d): d is number => d !== null);
+    const code: number[] = [];
+    // Correction TS2677: Simple boucle pour éviter les erreurs de type prédicat
+    round.code.forEach(c => {
+      if (typeof c.digit === 'number') code.push(c.digit);
+    });
+
     if (code.length === 3) {
       for (const query of round.queries) {
         if (query.state !== "unknown") {
