@@ -14,7 +14,7 @@ const myWorker = new Worker(
   "/turing-machine-board-game-solver/wasm/worker.mjs"
 );
 
-// --- Fonctions internes utilisées par checkDeductions ---
+// --- Fonctions internes ---
 
 function checkDigits(state: RootState, possibleCodes: string[]) {
   const digits = { triangle: new Set(), square: new Set(), circle: new Set() };
@@ -25,7 +25,7 @@ function checkDigits(state: RootState, possibleCodes: string[]) {
   }
   for (const { shape, digit } of state.digitCode) {
     // @ts-ignore
-    if (digits[shape as keyof typeof digits].has(digit)) {
+    if (digits[shape].has(digit)) {
       return false;
     }
   }
@@ -69,11 +69,10 @@ function checkLetters(state: RootState, possibleLetters: string[][]) {
   return true;
 }
 
-// --- Nouvelle fonction pour vos tests OK/KO par lettre ---
+// --- Fonctions Exportées ---
 
 /**
- * Cette fonction est appelée quand on clique sur une lettre (A, B, C...)
- * Elle valide si le code saisi respecte la loi de la solution.
+ * LOGIQUE DE VÉRIFICATION POUR LES TESTS PAR LETTRE (OK/KO)
  */
 export async function verifySingleQuery(
   state: RootState,
@@ -93,16 +92,8 @@ export async function verifySingleQuery(
     });
   }
 
-  // On demande au worker de trouver la solution unique du setup
-  const solverResult = await waitForWorker({
-    type: "solve_wasm",
-    verifierCards,
-    queries: [],
-    mode,
-    numVerifiers,
-  });
-
-  // On teste si VOTRE code respecte l'indice de loi de la solution
+  // On lance la simulation : Si on considère ce code comme vrai pour cette lettre,
+  // est-ce que le système trouve encore au moins un code possible (la solution) ?
   const result = await waitForWorker({
     type: "solve_wasm",
     verifierCards,
@@ -115,12 +106,8 @@ export async function verifySingleQuery(
     numVerifiers,
   });
 
-  // Si après avoir forcé "votre code est vrai", il reste des solutions possibles 
-  // (incluant le code 532), alors c'est OK (solved). Sinon KO (unsolved).
-  return result.codes.length > 0 ? "solved" : "unsolved";
+  return result.codes && result.codes.length > 0 ? "solved" : "unsolved";
 }
-
-// --- Fonctions d'origine exportées ---
 
 export async function checkDeductions(state: RootState) {
   if (state.comments.length === 0) return;
@@ -204,12 +191,12 @@ export async function getPossibleCodes(comments: CommentsState) {
   });
 }
 
-// --- Gestion du Worker ---
+// --- Système de communication Worker ---
 
 let workId = 0;
 const promiseResolves: { [id: number]: (value: any) => void } = {};
 
-async function waitForWorker(data: { [key: string]: any }): Promise<any> {
+async function waitForWorker(data: any): Promise<any> {
   const currentWorkId = workId++;
   return new Promise((res) => {
     promiseResolves[currentWorkId] = res;
