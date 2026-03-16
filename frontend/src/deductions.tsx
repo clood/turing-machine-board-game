@@ -71,70 +71,89 @@ function checkLetters(state: RootState, possibleLetters: string[][]) {
  * Fonction de vérification d'une lettre spécifique (A-F) lors d'un clic dans une manche.
  * Réécrite pour ne tester que le code actuel contre la lettre sélectionnée.
  */
+/**
+ * Version corrigée : On envoie toutes les cartes pour garder les index alignés,
+ * mais on ne pose qu'une seule question au worker pour la lettre cliquée.
+ */
 export async function verifySingleQuery(
   state: RootState,
   code: number[],
-  verifier: string // La lettre cliquée (ex: 'A')
+  verifier: string // Exemple: "A", "B", etc.
 ): Promise<"solved" | "unsolved"> {
   const numVerifiers = state.comments.length;
   
-  // 1. Mode et cartes : On ne prend que la carte associée à la lettre cliquée
+  // 1. On identifie l'index de la lettre (A=0, B=1...)
   const verifierIdxLetter = verifier.charCodeAt(0) - "A".charCodeAt(0);
-  const mode = state.comments[0].nightmare ? 2 : (state.comments[0].criteriaCards.length > 1 ? 1 : 0);
+  
+  const mode = (() => {
+    if (state.comments[0].nightmare) return 2;
+    if (state.comments[0].criteriaCards.length > 1) return 1;
+    return 0;
+  })();
 
-  // On filtre pour ne garder que l'ID de la carte correspondant à la lettre testée
-  const cards = [
-    state.comments[verifierIdxLetter].criteriaCards[0].id,
-    ...(mode === 1 ? [state.comments[verifierIdxLetter].criteriaCards[1].id] : [])
+  // IMPORTANT : Le worker WASM a besoin de la liste complète des cartes 
+  // pour que l'index de la lettre corresponde au bon emplacement.
+  const allCards = [
+    ...state.comments.map(({ criteriaCards }) => criteriaCards[0].id),
+    ...(mode === 1
+      ? state.comments.map(({ criteriaCards }) => criteriaCards[1]?.id).filter(Boolean)
+      : []),
   ];
 
   const verifierIdxChar = verifier.charCodeAt(0);
 
-  // 2. On exécute le worker sur cette unique lettre avec le code de la manche
+  // 2. On demande au worker : "Si on considère que cette lettre est VRAIE pour ce code,
+  // reste-t-il des solutions possibles ?"
   const result = await waitForWorker({
     type: "solve_wasm",
-    verifierCards: cards,
+    verifierCards: allCards,
     queries: [{ code, verifierIdx: verifierIdxChar, result: true }],
     mode,
     numVerifiers,
   });
 
-  // 3. Tests finaux selon les règles 3.1, 3.2 et 3.3
+  // LOGS pour debug dans la console du navigateur (F12)
+  console.log(`Test Lettre ${verifier} avec code ${code.join("")}`, result);
+
+  // 3. Application des règles de décision
   
-  // Règle 3.1 : Pas de code possible
-  if (result.codes.length === 0) {
+  // Règle 3.1 : Si le worker ne trouve aucune combinaison de cartes/codes 
+  // qui valide ce test, c'est que c'est KO.
+  if (!result || result.codes.length === 0) {
     store.dispatch(
       alertActions.openAlert({
-        message: `KO: Le code ${code.join("")} est incorrect pour la lettre ${verifier} (unsolved).`,
+        message: `KO: Le code ${code.join("")} ne passe pas le test ${verifier} (unsolved).`,
         level: "error",
       })
     );
     return "unsolved";
   }
 
-  // Règle 3.2 : Vérification spécifique à la lettre courante
-  // (On vérifie si la lettre cliquée est dans les possibleLetters renvoyées)
+  // Règle 3.2 : On vérifie si la lettre testée fait partie des "possibleLetters"
+  // renvoyées par le solveur pour ce résultat.
+  // Note: result.possibleLetters est un tableau de tableaux ou de strings selon le mode.
   const isLetterPossible = result.possibleLetters[verifierIdxLetter]?.includes(verifier);
 
   if (!isLetterPossible) {
     store.dispatch(
       alertActions.openAlert({
-        message: `KO: La lettre ${verifier} n'est pas validée par le code ${code.join("")} (unsolved).`,
+        message: `KO: La lettre ${verifier} est rejetée par le code ${code.join("")} (unsolved).`,
         level: "warning",
       })
     );
     return "unsolved";
   }
 
-  // Règle 3.3 : Succès
+  // Règle 3.3 : Si on arrive ici, c'est OK
   store.dispatch(
     alertActions.openAlert({
-      message: `OK: La lettre ${verifier} est validée par le code ${code.join("")} (solved) !`,
+      message: `OK: La lettre ${verifier} accepte le code ${code.join("")} (solved) !`,
       level: "success",
     })
   );
   return "solved";
 }
+
 
 export async function checkDeductions(state: RootState) {
   const numVerifiers = state.comments.length;
